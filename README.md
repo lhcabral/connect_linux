@@ -6,10 +6,10 @@ Liga um computador Linux (feito para o Linux Mint) a um celular Android. Os dois
 
 | Aparelho | Arquivo |
 | --- | --- |
-| Computador (Linux Mint, Ubuntu, Debian) | [connectlinux_all.deb](https://github.com/__OWNER__/connect-linux/releases/latest/download/connectlinux_all.deb) |
-| Celular (Android 8 ou mais novo) | [ConnectLinux.apk](https://github.com/__OWNER__/connect-linux/releases/latest/download/ConnectLinux.apk) |
+| Computador (Linux Mint, Ubuntu, Debian) | [connectlinux_all.deb](https://github.com/lhcabral/connect_linux/releases/latest/download/connectlinux_all.deb) |
+| Celular (Android 8 ou mais novo) | [ConnectLinux.apk](https://github.com/lhcabral/connect_linux/releases/latest/download/ConnectLinux.apk) |
 
-Todas as versões e as somas SHA-256 ficam na página de [releases](https://github.com/__OWNER__/connect-linux/releases).
+Todas as versões e as somas SHA-256 ficam na página de [releases](https://github.com/lhcabral/connect_linux/releases).
 
 ## Como instalar
 
@@ -21,7 +21,7 @@ Todas as versões e as somas SHA-256 ficam na página de [releases](https://gith
 
 ```bash
 cd ~/Downloads
-wget https://github.com/__OWNER__/connect-linux/releases/latest/download/connectlinux_all.deb
+wget https://github.com/lhcabral/connect_linux/releases/latest/download/connectlinux_all.deb
 sudo apt install ./connectlinux_all.deb
 ```
 
@@ -38,7 +38,7 @@ Para desinstalar: `sudo apt remove connectlinux`.
 
 ### No celular
 
-1. Abra no celular o link do [ConnectLinux.apk](https://github.com/__OWNER__/connect-linux/releases/latest/download/ConnectLinux.apk) e baixe o arquivo.
+1. Abra no celular o link do [ConnectLinux.apk](https://github.com/lhcabral/connect_linux/releases/latest/download/ConnectLinux.apk) e baixe o arquivo.
 2. Toque no arquivo baixado. Na primeira vez, o Android pede para **permitir instalar apps desta fonte**: ative para o navegador ou o gerenciador de arquivos e volte.
 3. Toque em **Instalar**. Se o Play Protect avisar que o app é desconhecido, toque em **Mais detalhes** e depois em **Instalar assim mesmo**. Isso acontece com todo app instalado fora da Play Store.
 4. Abra o Connect Linux e aceite as notificações.
