@@ -181,7 +181,23 @@ class ConnectService : Service() {
     }
 
     fun submitCode(code: String) {
-        link?.submitCode(code.filter { it.isDigit() }.take(6))
+        val digits = code.filter { it.isDigit() }.take(6)
+        if (digits.length != 6) {
+            update { it.copy(pairError = "Digite os 6 dígitos mostrados no computador.") }
+            return
+        }
+        val client = link
+        if (client == null) {
+            update { it.copy(pairError = "A conexão caiu. Conecte de novo.") }
+            return
+        }
+        io.execute {
+            try {
+                client.submitCode(digits)
+            } catch (exc: Exception) {
+                update { it.copy(pairError = "Não foi possível enviar o código. Conecte de novo.") }
+            }
+        }
     }
 
     fun sendText(text: String) {
@@ -262,20 +278,24 @@ class ConnectService : Service() {
         }
         val client = link
         if (!ready || client == null) return
-        try {
-            client.sendClipboard(text)
-        } catch (_: Exception) {
+        io.execute {
+            try {
+                client.sendClipboard(text)
+            } catch (_: Exception) {
+            }
         }
     }
 
     fun findComputer() {
         val client = link
         if (!ready || client == null) return
-        try {
-            client.findComputer()
-            update { it.copy(lastEvent = "Chamando o computador…") }
-        } catch (exc: Exception) {
-            update { it.copy(lastEvent = exc.message ?: "Falha ao chamar o computador.") }
+        io.execute {
+            try {
+                client.findComputer()
+                update { it.copy(lastEvent = "Chamando o computador…") }
+            } catch (exc: Exception) {
+                update { it.copy(lastEvent = exc.message ?: "Falha ao chamar o computador.") }
+            }
         }
     }
 
@@ -332,9 +352,12 @@ class ConnectService : Service() {
         if (stamp == lastNotice && now - lastNoticeAt < 2500) return
         lastNotice = stamp
         lastNoticeAt = now
-        try {
-            link?.sendNotification(UUID.randomUUID().toString(), appName, title, body)
-        } catch (_: Exception) {
+        val client = link ?: return
+        io.execute {
+            try {
+                client.sendNotification(UUID.randomUUID().toString(), appName, title, body)
+            } catch (_: Exception) {
+            }
         }
     }
 
