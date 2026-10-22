@@ -1,0 +1,13 @@
+[Desktop Entry]
+Version=1.0
+Type=Application
+Name=Connect Linux
+GenericName=Vínculo com o Android
+Comment=Conecta este Linux a um celular Android na mesma rede
+Exec=__ROOT__/run.sh
+Path=__ROOT__
+Icon=__ROOT__/icon.png
+Terminal=false
+Categories=Network;Utility;
+StartupNotify=true
+Keywords=android;celular;telefone;clipboard;arquivo;

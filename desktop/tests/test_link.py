@@ -1,0 +1,293 @@
+"""Testes do protocolo e de uma conversa completa entre computador e celular."""
+
+from __future__ import annotations
+
+import asyncio
+import base64
+import hashlib
+import tempfile
+import time
+import unittest
+import uuid
+from pathlib import Path
+
+from connectlinux.link_server import LinkServer, read_message
+from connectlinux.protocol import decode_payload, encode_message, frame_size
+from connectlinux.store import Store
+from connectlinux.system_bridge import destination_for, sanitize_filename, valid_http_url
+
+
+class ProtocolTests(unittest.TestCase):
+    def test_frame_roundtrip(self) -> None:
+        encoded = encode_message({"type": "ping", "text": "ação"})
+        length = frame_size(encoded[:4])
+        self.assertEqual(decode_payload(encoded[4:])["text"], "ação")
+        self.assertEqual(length, len(encoded) - 4)
+
+    def test_filename_stays_inside_folder(self) -> None:
+        self.assertEqual(sanitize_filename("../../etc/passwd"), "passwd")
+        self.assertEqual(sanitize_filename("..\\..\\secreto.txt"), "secreto.txt")
+        self.assertEqual(sanitize_filename(""), "arquivo")
+        with tempfile.TemporaryDirectory() as temporary:
+            folder = Path(temporary)
+            path = destination_for(folder, "../../etc/passwd")
+            self.assertEqual(path.parent, folder.resolve())
+            self.assertEqual(path.name, "passwd")
+
+    def test_only_http_links(self) -> None:
+        self.assertTrue(valid_http_url("https://exemplo.com/a"))
+        self.assertFalse(valid_http_url("javascript:alert(1)"))
+        self.assertFalse(valid_http_url("https://exemplo.com/a b"))
+        self.assertFalse(valid_http_url("file:///etc/passwd"))
+
+
+class ConversationTests(unittest.IsolatedAsyncioTestCase):
+    async def asyncSetUp(self) -> None:
+        self.tmp = tempfile.TemporaryDirectory()
+        root = Path(self.tmp.name)
+        self.store = Store(path=root / "config.json", download_dir=root / "recebidos")
+        self.clips: list[str] = []
+        self.notes: list[tuple[str, str]] = []
+        self.urls: list[str] = []
+        self.sounds: list[str] = []
+        self.codes: list[str] = []
+        self.server = LinkServer(
+            self.store,
+            host="127.0.0.1",
+            port=0,
+            enable_discovery=False,
+            read_clipboard=lambda: None,
+            write_clipboard=self._save_clip,
+            notify=lambda title, body: self.notes.append((title, body)),
+            open_url=self._save_url,
+            play_sound=lambda: self.sounds.append("tocou"),
+            read_battery=lambda: None,
+            on_event=self._on_event,
+        )
+        self.task = asyncio.create_task(self.server.serve())
+        await self.server.wait_started()
+
+    async def asyncTearDown(self) -> None:
+        self.server.request_stop()
+        await asyncio.wait_for(self.task, 5)
+        self.tmp.cleanup()
+
+    def _save_clip(self, text: str) -> bool:
+        self.clips.append(text)
+        return True
+
+    def _save_url(self, url: str) -> bool:
+        self.urls.append(url)
+        return True
+
+    def _on_event(self, kind: str, payload: dict) -> None:
+        if kind == "pair" and payload.get("code"):
+            self.codes.append(str(payload["code"]))
+
+    async def test_pair_clipboard_file_and_reconnect(self) -> None:
+        device_id = str(uuid.uuid4())
+        peer = await self._connect(device_id, "Pixel de teste")
+        await peer.recv_type("hello_ack")
+        await peer.send({"type": "pair_request"})
+        await peer.recv_type("pair_required")
+        wrong = "000000" if self.codes[-1] != "000000" else "111111"
+        await peer.send({"type": "pair_submit", "code": wrong})
+        refused = await peer.recv_type("pair_fail")
+        self.assertIn("incorreto", refused["message"])
+
+        await peer.send({"type": "pair_submit", "code": self.codes[-1]})
+        paired = await peer.recv_type("pair_ok")
+        token = paired["token"]
+        self.assertTrue(self.store.verify(device_id, token))
+
+        await peer.send({"type": "clipboard", "text": "ação e café", "ts": 1})
+        await peer.send({"type": "ping", "ts": 1})
+        await peer.recv_type("pong")
+        self.assertEqual(self.clips, ["ação e café"])
+
+        await peer.send(
+            {
+                "type": "notification",
+                "id": "n1",
+                "app": "Mensagens",
+                "title": "Oi",
+                "body": "olá",
+                "ts": 1,
+            }
+        )
+        await peer.send({"type": "open_url", "url": "https://linuxmint.com"})
+        await peer.send({"type": "find"})
+        await peer.send({"type": "ping", "ts": 2})
+        await peer.recv_type("pong")
+        self.assertTrue(any(title == "Oi" for title, _body in self.notes))
+        self.assertEqual(self.urls, ["https://linuxmint.com"])
+        self.assertEqual(self.sounds, ["tocou"])
+
+        payload = "arquivo de prova\n".encode()
+        digest = hashlib.sha256(payload).hexdigest()
+        file_id = "abc123"
+        await peer.send(
+            {
+                "type": "file_meta",
+                "id": file_id,
+                "name": "../../etc/passwd",
+                "size": len(payload),
+                "mime": "text/plain",
+                "sha256": digest,
+            }
+        )
+        accepted = await peer.recv_type("file_accept")
+        self.assertEqual(accepted["id"], file_id)
+        await peer.send(
+            {
+                "type": "file_chunk",
+                "id": file_id,
+                "seq": 0,
+                "last": True,
+                "data": base64.b64encode(payload).decode("ascii"),
+            }
+        )
+        done = await peer.recv_type("file_complete")
+        self.assertTrue(done["ok"])
+        saved = self.store.download_dir / "passwd"
+        self.assertEqual(saved.read_bytes(), payload)
+
+        peer.writer.close()
+        await peer.writer.wait_closed()
+        await self._wait_offline()
+
+        again = await self._connect(device_id, "Pixel de teste")
+        await again.recv_type("hello_ack")
+        await again.send({"type": "auth", "token": token})
+        await again.recv_type("auth_ok")
+
+        outgoing = self.store.download_dir / "volta.txt"
+        outgoing.write_text("de volta", encoding="utf-8")
+        received: list[bytes] = []
+
+        async def accept_outgoing() -> None:
+            meta = await again.recv_type("file_meta")
+            await again.send({"type": "file_accept", "id": meta["id"]})
+            chunk = await again.recv_type("file_chunk")
+            self.assertTrue(chunk["last"])
+            received.append(base64.b64decode(chunk["data"]))
+            await again.send(
+                {"type": "file_complete", "id": meta["id"], "ok": True, "sha256": meta["sha256"]}
+            )
+
+        incoming = asyncio.create_task(accept_outgoing())
+        await self.server.send_file(device_id, outgoing)
+        await incoming
+        self.assertEqual(received, [b"de volta"])
+
+        await again.send({"type": "unpair"})
+        await self._wait_offline()
+        self.assertFalse(self.store.is_paired(device_id))
+        again.writer.close()
+
+    async def test_adopted_socket_pairs_like_tcp(self) -> None:
+        import socket as socket_module
+
+        server_end, phone_end = socket_module.socketpair()
+        server_end.setblocking(False)
+        adopted = asyncio.create_task(self.server.adopt_socket(server_end))
+        reader, writer = await asyncio.open_connection(sock=phone_end)
+        peer = _Peer(reader, writer)
+        await peer.send(
+            {"type": "hello", "v": 1, "id": str(uuid.uuid4()), "name": "Pelo Bluetooth", "platform": "android"}
+        )
+        await peer.recv_type("hello_ack")
+        await peer.send({"type": "pair_request"})
+        await peer.recv_type("pair_required")
+        await peer.send({"type": "pair_submit", "code": self.codes[-1]})
+        await peer.recv_type("pair_ok")
+        self.assertTrue(any(row["online"] for row in self.server.snapshot()))
+        writer.close()
+        await asyncio.wait_for(adopted, 5)
+
+    async def test_corrupt_file_is_discarded(self) -> None:
+        device_id = str(uuid.uuid4())
+        peer = await self._connect(device_id, "Outro celular")
+        await peer.recv_type("hello_ack")
+        await peer.send({"type": "pair_request"})
+        await peer.recv_type("pair_required")
+        await peer.send({"type": "pair_submit", "code": self.codes[-1]})
+        await peer.recv_type("pair_ok")
+
+        payload = b"dados"
+        await peer.send(
+            {
+                "type": "file_meta",
+                "id": "ruim",
+                "name": "nota.txt",
+                "size": len(payload),
+                "mime": "text/plain",
+                "sha256": hashlib.sha256(b"outro").hexdigest(),
+            }
+        )
+        await peer.recv_type("file_accept")
+        await peer.send(
+            {
+                "type": "file_chunk",
+                "id": "ruim",
+                "seq": 0,
+                "last": True,
+                "data": base64.b64encode(payload).decode("ascii"),
+            }
+        )
+        failed = await peer.recv_type("file_error")
+        self.assertIn("corrompido", failed["message"])
+        self.assertFalse((self.store.download_dir / "nota.txt").exists())
+        self.assertFalse((self.store.download_dir / "nota.txt.part").exists())
+        peer.writer.close()
+
+    async def _connect(self, device_id: str, name: str):
+        reader, writer = await asyncio.open_connection("127.0.0.1", self.server.port)
+        peer = _Peer(reader, writer)
+        await peer.send(
+            {"type": "hello", "v": 1, "id": device_id, "name": name, "platform": "android"}
+        )
+        return peer
+
+    async def _wait_offline(self) -> None:
+        deadline = time.monotonic() + 2
+        while time.monotonic() < deadline:
+            if not any(row["online"] for row in self.server.snapshot()):
+                return
+            await asyncio.sleep(0.02)
+        self.fail("a sessão deveria ter caído")
+
+
+class _Peer:
+    def __init__(self, reader: asyncio.StreamReader, writer: asyncio.StreamWriter) -> None:
+        self.reader = reader
+        self.writer = writer
+        self.inbox: asyncio.Queue = asyncio.Queue()
+        self.task = asyncio.create_task(self._pump())
+
+    async def _pump(self) -> None:
+        try:
+            while True:
+                await self.inbox.put(await read_message(self.reader))
+        except Exception:
+            await self.inbox.put(None)
+
+    async def send(self, message: dict) -> None:
+        self.writer.write(encode_message(message))
+        await self.writer.drain()
+
+    async def recv_type(self, kind: str, timeout: float = 5):
+        deadline = time.monotonic() + timeout
+        while True:
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
+                raise TimeoutError(kind)
+            message = await asyncio.wait_for(self.inbox.get(), remaining)
+            if message is None:
+                raise ConnectionError(kind)
+            if message.get("type") == kind:
+                return message
+
+
+if __name__ == "__main__":
+    unittest.main()

@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <color name="mint">#6BAF4A</color>
+    <color name="mint_dark">#2F6B2C</color>
+    <color name="mint_soft">#E7F5DF</color>
+    <color name="bg">#F3F6F1</color>
+    <color name="card">#FFFFFF</color>
+    <color name="ink">#1C2416</color>
+    <color name="muted">#5E6B58</color>
+</resources>

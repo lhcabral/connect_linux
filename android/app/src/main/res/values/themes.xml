@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <style name="Theme.ConnectLinux" parent="Theme.Material3.Light.NoActionBar">
+        <item name="colorPrimary">@color/mint_dark</item>
+        <item name="colorOnPrimary">@color/card</item>
+        <item name="colorSecondary">@color/mint</item>
+        <item name="colorSurface">@color/card</item>
+        <item name="android:statusBarColor">@color/mint_dark</item>
+        <item name="android:navigationBarColor">@color/bg</item>
+        <item name="android:windowBackground">@color/bg</item>
+    </style>
+</resources>
