@@ -6,13 +6,17 @@ import os
 import queue
 import shutil
 import subprocess
+import threading
 import tkinter as tk
 from pathlib import Path
 from tkinter import filedialog, messagebox, simpledialog, ttk
 
+from . import __version__, updater
 from .app import App
 from .system_bridge import notify
 from .tray import TrayIcon
+
+UPDATE_CHECK_MS = 6 * 60 * 60 * 1000
 
 
 class DesktopWindow:
@@ -21,6 +25,8 @@ class DesktopWindow:
         self._alive = True
         self._loading = True
         self._told_hide = False
+        self._update: dict | None = None
+        self._updating = False
         self._rows: list[dict] = []
         self._codes: dict[str, tuple[str, str]] = {}
         self._actions: queue.Queue = queue.Queue()
@@ -45,6 +51,7 @@ class DesktopWindow:
         self.root.protocol("WM_DELETE_WINDOW", self._on_close)
         self.root.after(200, self.refresh)
         self.root.after(150, self._poll_actions)
+        self.root.after(1500, self._check_update)
         if not self._tray_ok:
             self._append_log("Ícone ao lado do relógio indisponível. Fechar a janela encerra o programa.")
 
@@ -85,7 +92,16 @@ class DesktopWindow:
 
         header = ttk.Frame(outer)
         header.grid(row=0, column=0, sticky="ew")
-        ttk.Label(header, text="Connect Linux", style="Title.TLabel").pack(anchor="w")
+        title_row = ttk.Frame(header)
+        title_row.pack(fill="x")
+        ttk.Label(title_row, text="Connect Linux", style="Title.TLabel").pack(side="left")
+        self.update_button = ttk.Button(
+            title_row,
+            text=f"Versão {__version__} · procurando atualização…",
+            command=self._start_update,
+            state="disabled",
+        )
+        self.update_button.pack(side="right")
         ttk.Label(
             header,
             text="Deixe o celular na mesma rede Wi-Fi e abra o aplicativo Connect Linux. Fechar esta janela deixa o programa ao lado do relógio.",
@@ -389,6 +405,82 @@ class DesktopWindow:
             if not self._alive:
                 return
         self.root.after(150, self._poll_actions)
+
+    def _check_update(self) -> None:
+        if not self._alive:
+            return
+        self.root.after(UPDATE_CHECK_MS, self._check_update)
+        if self._updating:
+            return
+
+        def run() -> None:
+            try:
+                found = updater.check_latest()
+            except Exception as exc:
+                log_text = f"Não foi possível procurar atualização: {exc}"
+                self._post(lambda: self._show_update(None, log_text))
+                return
+            self._post(lambda: self._show_update(found, None))
+
+        threading.Thread(target=run, name="connectlinux-update", daemon=True).start()
+
+    def _show_update(self, found: dict | None, error: str | None) -> None:
+        if self._updating:
+            return
+        if error:
+            self.update_button.configure(text=f"Versão {__version__}", state="disabled")
+            return
+        if not found:
+            self._update = None
+            self.update_button.configure(text=f"Versão {__version__} · atualizada", state="disabled")
+            return
+        is_new = self._update is None or self._update["version"] != found["version"]
+        self._update = found
+        self.update_button.configure(text=f"Atualizar para {found['version']}", state="normal")
+        if is_new:
+            self._append_log(f"Versão {found['version']} disponível. Clique em Atualizar para instalar.")
+            notify("Connect Linux", f"Versão {found['version']} disponível. Abra a janela e clique em Atualizar.")
+
+    def _start_update(self) -> None:
+        found = self._update
+        if not found or self._updating:
+            return
+        if not messagebox.askyesno(
+            "Connect Linux",
+            f"Baixar e instalar a versão {found['version']}? O sistema vai pedir a sua senha.",
+            parent=self.root,
+        ):
+            return
+        self._updating = True
+        self.update_button.configure(text="Atualizando…", state="disabled")
+        self._append_log(f"Baixando a versão {found['version']}…")
+
+        def run() -> None:
+            try:
+                version = updater.download_and_install(found)
+            except Exception as exc:
+                message = str(exc)
+                self._post(lambda: self._update_failed(message))
+                return
+            self._post(lambda: self._update_done(version))
+
+        threading.Thread(target=run, name="connectlinux-install", daemon=True).start()
+
+    def _update_failed(self, message: str) -> None:
+        self._updating = False
+        self._append_log(f"Atualização não concluída: {message}")
+        if self._update:
+            self.update_button.configure(text=f"Atualizar para {self._update['version']}", state="normal")
+
+    def _update_done(self, version: str) -> None:
+        if updater.running_installed():
+            notify("Connect Linux", f"Versão {version} instalada. Reabrindo o programa.")
+            updater.restart_later()
+            self._quit()
+            return
+        self._updating = False
+        self.update_button.configure(text=f"Versão {version} instalada", state="disabled")
+        self._append_log(f"Versão {version} instalada. Abra o Connect Linux pelo menu do Mint para usá-la.")
 
     def _on_close(self) -> None:
         if self._tray_ok:

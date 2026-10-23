@@ -17,6 +17,7 @@ from connectlinux.link_server import LinkServer, read_message
 from connectlinux.protocol import decode_payload, encode_message, frame_size
 from connectlinux.store import Store
 from connectlinux.system_bridge import destination_for, sanitize_filename, valid_http_url
+from connectlinux.updater import is_newer, parse_version
 
 
 class ProtocolTests(unittest.TestCase):
@@ -41,6 +42,13 @@ class ProtocolTests(unittest.TestCase):
         self.assertFalse(valid_http_url("javascript:alert(1)"))
         self.assertFalse(valid_http_url("https://exemplo.com/a b"))
         self.assertFalse(valid_http_url("file:///etc/passwd"))
+
+    def test_version_compare(self) -> None:
+        self.assertEqual(parse_version("v1.0.10"), (1, 0, 10))
+        self.assertTrue(is_newer("1.0.10", "1.0.9"))
+        self.assertTrue(is_newer("v1.1.0", "1.0.2"))
+        self.assertFalse(is_newer("1.0.2", "1.0.2"))
+        self.assertFalse(is_newer("1.0.1", "1.0.2"))
 
 
 class ConversationTests(unittest.IsolatedAsyncioTestCase):
