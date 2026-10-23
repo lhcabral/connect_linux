@@ -43,6 +43,17 @@ class ProtocolTests(unittest.TestCase):
         self.assertFalse(valid_http_url("https://exemplo.com/a b"))
         self.assertFalse(valid_http_url("file:///etc/passwd"))
 
+    def test_pix_payload(self) -> None:
+        from connectlinux import pix
+
+        self.assertEqual(pix.crc16(b"123456789"), 0x29B1)
+        code = pix.payload()
+        self.assertTrue(code.startswith("000201"))
+        self.assertIn("0014br.gov.bcb.pix0125luizhenrique.be@gmail.com", code)
+        self.assertIn("5303986", code)
+        self.assertEqual(code[-8:-4], "6304")
+        self.assertEqual(code[-4:], f"{pix.crc16(code[:-4].encode()):04X}")
+
     def test_version_compare(self) -> None:
         self.assertEqual(parse_version("v1.0.10"), (1, 0, 10))
         self.assertTrue(is_newer("1.0.10", "1.0.9"))

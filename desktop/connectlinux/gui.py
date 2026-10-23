@@ -8,15 +8,17 @@ import shutil
 import subprocess
 import threading
 import tkinter as tk
+import tkinter.font as tkfont
 from pathlib import Path
 from tkinter import filedialog, messagebox, simpledialog, ttk
 
-from . import __version__, updater
+from . import __version__, pix, updater
 from .app import App
 from .system_bridge import notify
 from .tray import TrayIcon
 
 UPDATE_CHECK_MS = 6 * 60 * 60 * 1000
+GITHUB_URL = "https://github.com/lhcabral/connect_linux"
 
 
 class DesktopWindow:
@@ -102,6 +104,7 @@ class DesktopWindow:
             state="disabled",
         )
         self.update_button.pack(side="right")
+        ttk.Button(title_row, text="Ajuda", command=self._show_help).pack(side="right", padx=(0, 8))
         ttk.Label(
             header,
             text="Deixe o celular na mesma rede Wi-Fi e abra o aplicativo Connect Linux. Fechar esta janela deixa o programa ao lado do relógio.",
@@ -482,6 +485,14 @@ class DesktopWindow:
         self.update_button.configure(text=f"Versão {version} instalada", state="disabled")
         self._append_log(f"Versão {version} instalada. Abra o Connect Linux pelo menu do Mint para usá-la.")
 
+    def _show_help(self) -> None:
+        window = getattr(self, "_help_window", None)
+        if window is not None and window.winfo_exists():
+            window.deiconify()
+            window.lift()
+            return
+        self._help_window = _help_window(self.root)
+
     def _on_close(self) -> None:
         if self._tray_ok:
             self._hide()
@@ -541,6 +552,93 @@ class DesktopWindow:
             tray.stop()
         self.app.stop()
         self.root.destroy()
+
+
+def _help_window(parent: tk.Tk) -> tk.Toplevel:
+    window = tk.Toplevel(parent)
+    window.title("Ajuda · Connect Linux")
+    window.transient(parent)
+    window.resizable(False, False)
+    window.configure(bg="#F3F6F1")
+    body = ttk.Frame(window, padding=20)
+    body.pack(fill="both", expand=True)
+    font = tkfont.Font(family="Sans", size=11)
+    line = font.metrics("linespace")
+    wrap = font.measure("0") * 52
+
+    ttk.Label(body, text="Connect Linux", style="Title.TLabel").pack(anchor="w")
+    ttk.Label(body, text=f"Versão {__version__}", style="Hint.TLabel").pack(anchor="w")
+    ttk.Label(
+        body,
+        text=(
+            "Liga este computador a um celular Android pelo Wi-Fi, Bluetooth, cabo USB ou Tailscale. "
+            "Envia texto, links e arquivos nos dois sentidos, compartilha a área de transferência "
+            "e mostra aqui as notificações do celular."
+        ),
+        wraplength=wrap,
+        justify="left",
+    ).pack(anchor="w", pady=(10, 4))
+    ttk.Label(
+        body,
+        text="Fechar a janela principal deixa o programa ao lado do relógio. Clique com o direito no ícone para conectar ou sair.",
+        style="Hint.TLabel",
+        wraplength=wrap,
+        justify="left",
+    ).pack(anchor="w", pady=(0, 12))
+
+    ttk.Label(body, text="Criador: Luiz Henrique Cabral de Oliveira").pack(anchor="w")
+    _link(body, "luizhenrique.be@gmail.com", "mailto:luizhenrique.be@gmail.com")
+    _link(body, GITHUB_URL, GITHUB_URL)
+
+    ttk.Separator(body).pack(fill="x", pady=14)
+    ttk.Label(body, text="Gostou? Faça uma doação pelo Pix", font=("Sans", 12, "bold")).pack(anchor="w")
+    code = pix.payload()
+    matrix = pix.qr_matrix(code)
+    if matrix:
+        scale = max(3, line * 12 // len(matrix))
+        size = len(matrix) * scale
+        canvas = tk.Canvas(body, width=size, height=size, bg="#FFFFFF", highlightthickness=0)
+        for row, cells in enumerate(matrix):
+            for column, dark in enumerate(cells):
+                if dark:
+                    x, y = column * scale, row * scale
+                    canvas.create_rectangle(x, y, x + scale, y + scale, fill="#000000", outline="")
+        canvas.pack(pady=(8, 6))
+    else:
+        ttk.Label(body, text="(Instale python3-qrcode para ver o QR code.)", style="Hint.TLabel").pack(anchor="w")
+    ttk.Label(body, text=f"Chave Pix (e-mail): {pix.PIX_KEY}").pack(anchor="center")
+
+    status = tk.StringVar(value="")
+
+    def copy(text: str, label: str) -> None:
+        window.clipboard_clear()
+        window.clipboard_append(text)
+        status.set(f"{label} copiado.")
+
+    buttons = ttk.Frame(body)
+    buttons.pack(pady=(8, 0))
+    ttk.Button(buttons, text="Copiar Pix copia e cola", command=lambda: copy(code, "Código Pix")).pack(side="left")
+    ttk.Button(buttons, text="Copiar chave", command=lambda: copy(pix.PIX_KEY, "Chave")).pack(side="left", padx=(8, 0))
+    ttk.Button(buttons, text="Fechar", command=window.destroy).pack(side="left", padx=(8, 0))
+    ttk.Label(body, textvariable=status, style="Hint.TLabel").pack(pady=(6, 0))
+    window.bind("<Escape>", lambda _event: window.destroy())
+    return window
+
+
+def _link(parent: ttk.Frame, text: str, target: str) -> None:
+    label = tk.Label(parent, text=text, fg="#2F6B2C", bg="#F3F6F1", cursor="hand2", font=("Sans", 11, "underline"))
+    label.pack(anchor="w")
+    label.bind("<Button-1>", lambda _event: _open_target(target))
+
+
+def _open_target(target: str) -> None:
+    if shutil.which("xdg-open"):
+        subprocess.Popen(
+            ["xdg-open", target],
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+            start_new_session=True,
+        )
 
 
 def _ask_text(parent: tk.Tk) -> str | None:
