@@ -64,6 +64,14 @@ Depois do primeiro pareamento, o celular reconecta sozinho pelo mesmo caminho.
 - Mostrar no computador as notificações do celular.
 - Ver a bateria e chamar o outro aparelho (som no computador, vibração no celular).
 - Compartilhar do celular pelo menu Compartilhar do Android.
+- Abrir uma imagem na tela do outro aparelho (veja abaixo).
+
+### Abrir uma imagem na tela do outro aparelho
+
+- **Do computador para o celular:** clique com o botão direito numa imagem no gerenciador de arquivos e escolha **Enviar para o Android "Nome do celular"**. Com a imagem aberta no Visualizador de imagens, a opção fica em **Abrir com**. A opção aparece para cada celular pareado enquanto o Connect Linux estiver rodando, e o celular conecta sozinho se estiver desconectado.
+- **Do celular para o computador:** na Galeria, toque em Compartilhar e escolha **Abrir no computador**. A imagem abre no visualizador padrão do Linux.
+
+Para a imagem abrir sozinha no celular mesmo com o aplicativo em segundo plano, toque em **Abrir na tela as imagens do computador** e permita "Sobrepor a outros apps". Sem essa permissão, aparece uma notificação: toque nela para ver a imagem.
 
 Arquivos recebidos no computador vão para `~/ConnectLinux/Recebidos`. No celular, vão para a pasta Downloads. O limite é 100 MB por arquivo.
 

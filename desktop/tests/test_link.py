@@ -84,7 +84,9 @@ class ConversationTests(unittest.IsolatedAsyncioTestCase):
             play_sound=lambda: self.sounds.append("tocou"),
             read_battery=lambda: None,
             on_event=self._on_event,
+            open_file=lambda path: self.opened.append(path) or True,
         )
+        self.opened: list[Path] = []
         self.task = asyncio.create_task(self.server.serve())
         await self.server.wait_started()
 
@@ -172,6 +174,34 @@ class ConversationTests(unittest.IsolatedAsyncioTestCase):
         self.assertTrue(done["ok"])
         saved = self.store.download_dir / "passwd"
         self.assertEqual(saved.read_bytes(), payload)
+        self.assertEqual(self.opened, [])
+
+        picture = b"\x89PNG\r\n\x1a\nfalso"
+        for name, should_open in (("foto.png", True), ("script.sh", False)):
+            await peer.send(
+                {
+                    "type": "file_meta",
+                    "id": name,
+                    "name": name,
+                    "size": len(picture),
+                    "mime": "image/png",
+                    "sha256": hashlib.sha256(picture).hexdigest(),
+                    "open": True,
+                }
+            )
+            await peer.recv_type("file_accept")
+            await peer.send(
+                {
+                    "type": "file_chunk",
+                    "id": name,
+                    "seq": 0,
+                    "last": True,
+                    "data": base64.b64encode(picture).decode("ascii"),
+                }
+            )
+            await peer.recv_type("file_complete")
+            opened = self.store.download_dir / name in self.opened
+            self.assertEqual(opened, should_open, name)
 
         peer.writer.close()
         await peer.writer.wait_closed()
@@ -188,6 +218,7 @@ class ConversationTests(unittest.IsolatedAsyncioTestCase):
 
         async def accept_outgoing() -> None:
             meta = await again.recv_type("file_meta")
+            self.assertTrue(meta["open"])
             await again.send({"type": "file_accept", "id": meta["id"]})
             chunk = await again.recv_type("file_chunk")
             self.assertTrue(chunk["last"])
@@ -197,7 +228,7 @@ class ConversationTests(unittest.IsolatedAsyncioTestCase):
             )
 
         incoming = asyncio.create_task(accept_outgoing())
-        await self.server.send_file(device_id, outgoing)
+        await self.server.send_file(device_id, outgoing, open_after=True)
         await incoming
         self.assertEqual(received, [b"de volta"])
 
@@ -346,6 +377,42 @@ class DiscoveryTests(unittest.TestCase):
             store = Store(path=Path(temporary) / "config.json")
             app = App(store=store, enable_discovery=False, enable_extras=False)
             self.assertIn("Nenhum celular pareado", app.connect_known_phones())
+
+
+class DesktopIntegrationTests(unittest.TestCase):
+    def test_context_menu_follows_paired_phones(self) -> None:
+        from connectlinux import context_menu
+
+        phone = "22222222-2222-2222-2222-222222222222"
+        with tempfile.TemporaryDirectory() as temporary:
+            base = Path(temporary)
+            self.assertTrue(context_menu.sync({phone: 'Galaxy "A54"; teste'}, base=base))
+            action = base / "nemo" / "actions" / "connectlinux-send-22222222.nemo_action"
+            entry = base / "applications" / "connectlinux-send-22222222.desktop"
+            text = action.read_text(encoding="utf-8")
+            self.assertIn("Name=Enviar para o Android “Galaxy A54 teste”", text)
+            self.assertIn(f"--send --device {phone} %F", text)
+            self.assertIn("image/jpeg", text)
+            self.assertIn("NoDisplay=true", entry.read_text(encoding="utf-8"))
+            self.assertFalse(context_menu.sync({phone: 'Galaxy "A54"; teste'}, base=base))
+            context_menu.sync({}, base=base)
+            self.assertFalse(action.exists())
+            self.assertFalse(entry.exists())
+
+    def test_control_socket_roundtrip(self) -> None:
+        from connectlinux import control
+
+        with tempfile.TemporaryDirectory() as temporary:
+            path = Path(temporary) / "c" / "control.sock"
+            server = control.ControlServer(lambda message: {"ok": True, "echo": message.get("cmd")}, path=path)
+            self.assertTrue(server.start())
+            try:
+                self.assertEqual(control.request({"cmd": "send"}, path=path, timeout=5), {"ok": True, "echo": "send"})
+                second = control.ControlServer(lambda _message: {}, path=path)
+                self.assertFalse(second.start())
+            finally:
+                server.stop()
+            self.assertIsNone(control.request({"cmd": "ping"}, path=path, timeout=1))
 
 
 if __name__ == "__main__":

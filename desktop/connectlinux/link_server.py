@@ -81,6 +81,7 @@ class LinkServer:
         play_sound: Callable[[], None] | None = None,
         read_battery: Callable[[], tuple[int, bool] | None] | None = None,
         on_event: Callable[[str, dict], None] | None = None,
+        open_file: Callable[[Path], bool] | None = None,
     ) -> None:
         self.store = store
         self.host = host
@@ -92,6 +93,7 @@ class LinkServer:
         self.open_url = open_url or bridge.open_url
         self.play_sound = play_sound or bridge.play_find_sound
         self.read_battery = read_battery or bridge.read_battery
+        self.open_file = open_file or bridge.open_path
         self.on_event = on_event
         self.fatal: str | None = None
         self.discovery = Discovery(store.device_id, lambda: store.name, lambda: self.port)
@@ -198,7 +200,7 @@ class LinkServer:
                 await session.send({"type": "unpair"})
             session.writer.close()
 
-    async def send_file(self, device_id: str, path: Path) -> None:
+    async def send_file(self, device_id: str, path: Path, open_after: bool = False) -> None:
         session = self.sessions.get(device_id)
         if session is None:
             raise ConnectionError("celular desconectado")
@@ -226,6 +228,7 @@ class LinkServer:
                         "size": size,
                         "mime": mime,
                         "sha256": digest,
+                        "open": bool(open_after),
                     }
                 )
                 try:
@@ -682,6 +685,7 @@ class LinkServer:
             "got": 0,
             "seq": 0,
             "shown": -10,
+            "open": bool(message.get("open")) and bridge.is_image_name(final.name),
         }
         await session.send({"type": "file_accept", "id": file_id})
         self._log(f"Recebendo {final.name} de {session.name}.")
@@ -734,7 +738,11 @@ class LinkServer:
         session.incoming = None
         await session.send({"type": "file_complete", "id": file_id, "ok": True, "sha256": actual})
         self._log(f"Arquivo salvo em {saved}")
-        self.notify("Arquivo recebido", saved.name)
+        if incoming["open"]:
+            self.open_file(saved)
+            self._log(f"Abrindo {saved.name}, enviada por {session.name}.")
+        else:
+            self.notify("Arquivo recebido", saved.name)
 
     async def _fail_incoming(self, session: Session, reason: str) -> None:
         incoming = session.incoming

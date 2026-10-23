@@ -50,6 +50,10 @@ object Protocol {
         return cleaned.take(120)
     }
 
+    private val imageSuffixes = setOf("jpg", "jpeg", "png", "gif", "webp", "bmp", "heic", "heif", "avif")
+
+    fun isImageName(name: String): Boolean = name.substringAfterLast('.', "").lowercase() in imageSuffixes
+
     fun isHttpUrl(url: String): Boolean {
         val text = url.trim()
         if (text.isEmpty() || text.any { it.isWhitespace() || it == '\u0000' }) return false

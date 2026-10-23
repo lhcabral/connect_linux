@@ -163,6 +163,15 @@ class MainActivity : AppCompatActivity() {
         binding.openBatterySettings.setOnClickListener {
             startActivity(Intent(Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS))
         }
+        binding.openOverlaySettings.setOnClickListener {
+            Toast.makeText(this, "Ative \"Sobrepor a outros apps\" para o Connect Linux.", Toast.LENGTH_LONG).show()
+            startActivity(Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION, Uri.parse("package:$packageName")))
+        }
+    }
+
+    override fun onResume() {
+        super.onResume()
+        binding.openOverlaySettings.visibility = if (Settings.canDrawOverlays(this)) View.GONE else View.VISIBLE
     }
 
     private fun render(state: UiState) {

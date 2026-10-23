@@ -203,6 +203,15 @@ def open_url(url: str) -> bool:
     return True
 
 
+_IMAGE_SUFFIXES = {
+    ".jpg", ".jpeg", ".png", ".gif", ".webp", ".bmp", ".tif", ".tiff", ".heic", ".heif", ".avif", ".svg",
+}
+
+
+def is_image_name(name: str) -> bool:
+    return Path(name).suffix.lower() in _IMAGE_SUFFIXES
+
+
 def open_path(path: Path) -> bool:
     if not shutil.which("xdg-open"):
         return False

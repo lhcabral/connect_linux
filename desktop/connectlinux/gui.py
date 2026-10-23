@@ -204,7 +204,9 @@ class DesktopWindow:
         if not self._alive:
             return
         for kind, payload in self.app.drain_events():
-            if kind == "log":
+            if kind == "present":
+                self._present()
+            elif kind == "log":
                 self._append_log(str(payload.get("text", "")))
             elif kind == "pair":
                 conn_id = str(payload.get("conn_id", ""))
@@ -666,8 +668,12 @@ def _ask_text(parent: tk.Tk) -> str | None:
     return result["value"] or None
 
 
-def run_gui(app: App) -> None:
-    DesktopWindow(app).root.mainloop()
+def run_gui(app: App, start_hidden: bool = False) -> None:
+    window = DesktopWindow(app)
+    if start_hidden and window._tray_ok:
+        window._told_hide = True
+        window.root.withdraw()
+    window.root.mainloop()
 
 
 def _request_maximize(root: tk.Tk) -> None:

@@ -20,8 +20,10 @@ import android.os.SystemClock
 import android.os.VibrationEffect
 import android.os.Vibrator
 import android.os.VibratorManager
-import android.provider.OpenableColumns
 import androidx.core.app.NotificationCompat
+import androidx.core.content.pm.ShortcutInfoCompat
+import androidx.core.content.pm.ShortcutManagerCompat
+import androidx.core.graphics.drawable.IconCompat
 import java.io.File
 import java.util.UUID
 import java.util.concurrent.CopyOnWriteArrayList
@@ -58,6 +60,7 @@ class ConnectService : Service() {
     private var lastNotice = ""
     private var lastNoticeAt = 0L
     private var lastConnectRequestAt = 0L
+    private val pendingOutgoing = mutableListOf<Pair<CachedFile, Boolean>>()
     private lateinit var discovery: DiscoveryClient
 
     override fun onCreate() {
@@ -116,6 +119,18 @@ class ConnectService : Service() {
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         startAsForeground(if (ready) "Conectado" else "Procurando computador")
+        if (intent?.action == ACTION_SEND_FILES) {
+            val paths = intent.getStringArrayExtra(EXTRA_PATHS).orEmpty()
+            val names = intent.getStringArrayExtra(EXTRA_NAMES).orEmpty()
+            val mimes = intent.getStringArrayExtra(EXTRA_MIMES).orEmpty()
+            val outbox = File(cacheDir, "outbox").canonicalFile
+            val files = paths.indices.mapNotNull { index ->
+                val file = File(paths[index]).canonicalFile
+                if (file.parentFile != outbox || !file.isFile) return@mapNotNull null
+                CachedFile(file, names.getOrNull(index) ?: file.name, mimes.getOrNull(index) ?: "application/octet-stream")
+            }
+            if (files.isNotEmpty()) queueOutgoing(files, intent.getBooleanExtra(EXTRA_OPEN, false))
+        }
         return START_STICKY
     }
 
@@ -247,14 +262,96 @@ class ConnectService : Service() {
             return
         }
         io.execute {
-            val cached = copyToCache(uri) ?: return@execute
-            try {
-                client.sendFile(cached.file, cached.name, cached.mime)
+            val cached = try {
+                Outbox.copy(this, uri)
             } catch (exc: Exception) {
-                update { it.copy(lastEvent = exc.message ?: "Falha ao enviar o arquivo.", fileStatus = "Falha ao enviar o arquivo.") }
-            } finally {
-                cached.file.delete()
+                update { it.copy(lastEvent = exc.message ?: "Não foi possível ler o arquivo.") }
+                return@execute
             }
+            sendCached(client, cached, open = false)
+        }
+    }
+
+    private fun sendCached(client: LinkClient, cached: CachedFile, open: Boolean) {
+        try {
+            client.sendFile(cached.file, cached.name, cached.mime, open)
+        } catch (exc: Exception) {
+            update { it.copy(lastEvent = exc.message ?: "Falha ao enviar o arquivo.", fileStatus = "Falha ao enviar o arquivo.") }
+        } finally {
+            cached.file.delete()
+        }
+    }
+
+    private fun queueOutgoing(files: List<CachedFile>, open: Boolean) {
+        commands.execute {
+            val client = link
+            if (ready && client != null) {
+                files.forEach { cached -> io.execute { sendCached(client, cached, open) } }
+                return@execute
+            }
+            pendingOutgoing.addAll(files.map { it to open })
+            while (pendingOutgoing.size > 20) pendingOutgoing.removeAt(0).first.file.delete()
+            update { it.copy(lastEvent = "Conectando ao computador para enviar…") }
+            if (link == null) {
+                val saved = store.lastDesktopId?.let { store.pairing(it) }
+                val last = store.lastTarget
+                userDisconnect = false
+                authBlocked = false
+                desired = when {
+                    saved != null && last != null -> last
+                    saved != null && saved.host.isNotBlank() -> Target.Network(saved.host, saved.port)
+                    else -> desired
+                }
+                startLink()
+            }
+            if (desired == null) {
+                notifyUser("Connect Linux", "Pareie um computador para enviar imagens.", 4)
+            }
+        }
+    }
+
+    private fun flushOutgoing(client: LinkClient) {
+        val waiting = pendingOutgoing.toList()
+        pendingOutgoing.clear()
+        waiting.forEach { (cached, open) -> io.execute { sendCached(client, cached, open) } }
+    }
+
+    private fun showImage(uri: Uri, name: String, from: String) {
+        val viewer = Intent(this, ImageViewerActivity::class.java)
+            .setData(uri)
+            .putExtra(ImageViewerActivity.EXTRA_NAME, name)
+            .putExtra(ImageViewerActivity.EXTRA_FROM, from)
+            .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_GRANT_READ_URI_PERMISSION)
+        val tap = PendingIntent.getActivity(this, 5, viewer, PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
+        val notification = NotificationCompat.Builder(this, "images")
+            .setSmallIcon(R.drawable.ic_stat)
+            .setContentTitle("Imagem de $from")
+            .setContentText("$name · toque para ver")
+            .setContentIntent(tap)
+            .setPriority(NotificationCompat.PRIORITY_HIGH)
+            .setAutoCancel(true)
+            .build()
+        getSystemService(NotificationManager::class.java)?.notify(5, notification)
+        main.post {
+            try {
+                startActivity(viewer)
+            } catch (_: Exception) {
+            }
+        }
+    }
+
+    private fun publishShareTarget(desktopId: String, desktopName: String) {
+        try {
+            val shortcut = ShortcutInfoCompat.Builder(this, "computer-$desktopId")
+                .setShortLabel(desktopName.take(25))
+                .setLongLabel("Abrir em $desktopName")
+                .setIcon(IconCompat.createWithResource(this, R.mipmap.ic_launcher))
+                .setIntent(Intent(this, ShareToComputerActivity::class.java).setAction(Intent.ACTION_DEFAULT))
+                .setCategories(setOf(SHARE_CATEGORY))
+                .setLongLived(true)
+                .build()
+            ShortcutManagerCompat.pushDynamicShortcut(this, shortcut)
+        } catch (_: Exception) {
         }
     }
 
@@ -450,6 +547,8 @@ class ConnectService : Service() {
                     }
                     refreshForeground("Conectado a $desktopName")
                     publish()
+                    publishShareTarget(desktopId, desktopName)
+                    flushOutgoing(client)
                     readBattery()?.let { battery ->
                         try {
                             client.sendBattery(battery.first, battery.second)
@@ -565,6 +664,12 @@ class ConnectService : Service() {
                 return IncomingFiles(this@ConnectService).open(name, mime)
             }
 
+            override fun onFileSaved(name: String, mime: String, uri: Uri, open: Boolean) {
+                if (current != generation.get() || !open) return
+                if (!mime.startsWith("image/") && !Protocol.isImageName(name)) return
+                showImage(uri, name, ui.connectedName.ifBlank { "computador" })
+            }
+
             override fun onClosed(reason: String) {
                 commands.execute {
                     if (current != generation.get() || link !== client) return@execute
@@ -634,49 +739,6 @@ class ConnectService : Service() {
         }
     }
 
-    private fun copyToCache(uri: Uri): CachedFile? {
-        val resolver = contentResolver
-        var name = "arquivo"
-        var declared = -1L
-        resolver.query(uri, arrayOf(OpenableColumns.DISPLAY_NAME, OpenableColumns.SIZE), null, null, null)?.use { cursor ->
-            if (cursor.moveToFirst()) {
-                val nameIndex = cursor.getColumnIndex(OpenableColumns.DISPLAY_NAME)
-                val sizeIndex = cursor.getColumnIndex(OpenableColumns.SIZE)
-                if (nameIndex >= 0) name = cursor.getString(nameIndex) ?: name
-                if (sizeIndex >= 0 && !cursor.isNull(sizeIndex)) declared = cursor.getLong(sizeIndex)
-            }
-        }
-        if (declared > Protocol.MAX_FILE) {
-            update { it.copy(lastEvent = "Arquivo maior que 100 MB.") }
-            return null
-        }
-        val folder = File(cacheDir, "outbox").apply { mkdirs() }
-        val dest = File(folder, UUID.randomUUID().toString())
-        val input = resolver.openInputStream(uri)
-        if (input == null) {
-            update { it.copy(lastEvent = "Não foi possível ler o arquivo.") }
-            return null
-        }
-        input.use { source ->
-            dest.outputStream().use { output ->
-                val buffer = ByteArray(64 * 1024)
-                var total = 0L
-                while (true) {
-                    val read = source.read(buffer)
-                    if (read < 0) break
-                    total += read
-                    if (total > Protocol.MAX_FILE) {
-                        dest.delete()
-                        update { it.copy(lastEvent = "Arquivo maior que 100 MB.") }
-                        return null
-                    }
-                    output.write(buffer, 0, read)
-                }
-            }
-        }
-        return CachedFile(dest, name, resolver.getType(uri) ?: "application/octet-stream")
-    }
-
     private fun update(block: (UiState) -> UiState) {
         val next = synchronized(stateLock) {
             ui = block(ui)
@@ -692,6 +754,7 @@ class ConnectService : Service() {
         find.enableVibration(true)
         manager.createNotificationChannel(find)
         manager.createNotificationChannel(NotificationChannel("messages", "Mensagens do computador", NotificationManager.IMPORTANCE_DEFAULT))
+        manager.createNotificationChannel(NotificationChannel("images", "Imagens do computador", NotificationManager.IMPORTANCE_HIGH))
     }
 
     private fun startAsForeground(text: String) {
@@ -756,9 +819,15 @@ class ConnectService : Service() {
     }
 
     private data class Seen(val id: String, val name: String, val host: String, val port: Int, val at: Long)
-    private data class CachedFile(val file: File, val name: String, val mime: String)
 
     companion object {
+        const val ACTION_SEND_FILES = "dev.connectlinux.app.action.SEND_FILES"
+        const val EXTRA_PATHS = "dev.connectlinux.app.extra.PATHS"
+        const val EXTRA_NAMES = "dev.connectlinux.app.extra.NAMES"
+        const val EXTRA_MIMES = "dev.connectlinux.app.extra.MIMES"
+        const val EXTRA_OPEN = "dev.connectlinux.app.extra.OPEN"
+        const val SHARE_CATEGORY = "dev.connectlinux.app.category.COMPUTER"
+
         @Volatile
         var instance: ConnectService? = null
             private set

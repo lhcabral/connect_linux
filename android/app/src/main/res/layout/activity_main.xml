@@ -319,6 +319,13 @@
             android:layout_height="wrap_content"
             android:text="Manter conexão em segundo plano" />
 
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/openOverlaySettings"
+            style="@style/Widget.Material3.Button.TonalButton"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="Abrir na tela as imagens do computador" />
+
         <TextView
             android:id="@+id/eventText"
             android:layout_width="match_parent"

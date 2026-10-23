@@ -4,15 +4,19 @@ from __future__ import annotations
 
 import argparse
 import logging
+import os
 import queue
 import signal
+import subprocess
 import sys
+import time
 from pathlib import Path
 
-from . import __version__
+from . import __version__, control
 from .app import App
 from .protocol import LINK_PORT
 from .store import Store
+from .system_bridge import notify
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -23,14 +27,26 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--headless", action="store_true", help="roda no terminal, sem janela")
     parser.add_argument("--name", help="nome deste computador mostrado no celular")
     parser.add_argument("--port", type=int, default=LINK_PORT, help="porta TCP (padrão: 17171)")
+    parser.add_argument("--send", action="store_true", help="envia os arquivos ao celular e abre na tela dele")
+    parser.add_argument("--device", default="", help="identificador do celular usado com --send")
+    parser.add_argument("--background", action="store_true", help="começa só com o ícone ao lado do relógio")
+    parser.add_argument("files", nargs="*", help="arquivos usados com --send")
     parser.add_argument("--version", action="version", version=f"Connect Linux {__version__}")
     args = parser.parse_args(argv)
+
+    if args.send:
+        return _send_command([Path(item).expanduser().resolve() for item in args.files], args.device)
 
     _setup_logging()
     store = Store()
     if args.name:
         store.set_name(args.name)
     app = App(store=store, port=args.port)
+    if not app.start_control():
+        if not args.background:
+            control.request({"cmd": "present"}, timeout=5)
+        print("O Connect Linux já está aberto.")
+        return 0
     app.start()
 
     if args.headless:
@@ -44,12 +60,52 @@ def main(argv: list[str] | None = None) -> int:
         return _headless(app)
 
     try:
-        run_gui(app)
+        run_gui(app, start_hidden=args.background)
     except tk_missing() as exc:
         print(f"Interface gráfica indisponível ({exc}). Continuando no terminal.")
         print("No Linux Mint: sudo apt install python3-tk")
         return _headless(app)
     return 0
+
+
+def _send_command(files: list[Path], device_id: str) -> int:
+    files = [path for path in files if path.is_file()]
+    if not files:
+        notify("Connect Linux", "Nenhum arquivo para enviar.")
+        return 1
+    message = {"cmd": "send", "files": [str(path) for path in files], "device": device_id, "open": True}
+    if control.request({"cmd": "ping"}, timeout=2) is None:
+        _launch_background()
+        deadline = time.monotonic() + 15
+        while control.request({"cmd": "ping"}, timeout=2) is None:
+            if time.monotonic() > deadline:
+                notify("Connect Linux", "Não foi possível abrir o Connect Linux.")
+                return 1
+            time.sleep(0.5)
+    reply = control.request(message, timeout=60)
+    if reply is None:
+        notify("Connect Linux", "O Connect Linux não respondeu.")
+        return 1
+    text = str(reply.get("message", ""))
+    print(text)
+    if not reply.get("ok"):
+        notify("Connect Linux", text)
+        return 1
+    return 0
+
+
+def _launch_background() -> None:
+    package_root = str(Path(__file__).resolve().parent.parent)
+    env = dict(os.environ)
+    env["PYTHONPATH"] = package_root + (os.pathsep + env["PYTHONPATH"] if env.get("PYTHONPATH") else "")
+    subprocess.Popen(
+        [sys.executable, "-m", "connectlinux", "--background"],
+        cwd=package_root,
+        env=env,
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+        start_new_session=True,
+    )
 
 
 def tk_missing() -> tuple[type[BaseException], ...]:

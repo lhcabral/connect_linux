@@ -2,6 +2,7 @@ package dev.connectlinux.app
 
 import android.content.ContentValues
 import android.content.Context
+import android.net.Uri
 import android.os.Build
 import android.os.Environment
 import android.provider.MediaStore
@@ -10,6 +11,7 @@ import java.io.OutputStream
 
 interface FileSink {
     val label: String
+    val uri: Uri
     fun write(bytes: ByteArray)
     fun finish()
     fun abort()
@@ -35,6 +37,7 @@ class IncomingFiles(private val context: Context) {
         val stream = resolver.openOutputStream(uri) ?: error("não foi possível gravar o arquivo")
         return object : FileSink {
             override val label: String = "Downloads/$name"
+            override val uri: Uri = uri
             override fun write(bytes: ByteArray) {
                 stream.write(bytes)
             }
@@ -62,6 +65,7 @@ class IncomingFiles(private val context: Context) {
         val stream: OutputStream = partial.outputStream()
         return object : FileSink {
             override val label: String = target.absolutePath
+            override val uri: Uri = Uri.fromFile(target)
             override fun write(bytes: ByteArray) {
                 stream.write(bytes)
             }

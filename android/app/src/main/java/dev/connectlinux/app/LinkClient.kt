@@ -1,6 +1,7 @@
 package dev.connectlinux.app
 
 import android.content.Context
+import android.net.Uri
 import android.util.Base64
 import org.json.JSONObject
 import java.io.EOFException
@@ -37,6 +38,7 @@ class LinkClient(
         fun onUnpair()
         fun onEvent(text: String)
         fun openDownload(name: String, mime: String): FileSink
+        fun onFileSaved(name: String, mime: String, uri: Uri, open: Boolean)
         fun onClosed(reason: String)
     }
 
@@ -99,7 +101,7 @@ class LinkClient(
         send(JSONObject().put("type", "unpair"))
     }
 
-    fun sendFile(file: File, displayName: String, mime: String) {
+    fun sendFile(file: File, displayName: String, mime: String, open: Boolean = false) {
         val size = file.length()
         if (size > Protocol.MAX_FILE) {
             listener.onEvent("Arquivo maior que 100 MB.")
@@ -118,7 +120,8 @@ class LinkClient(
                     .put("name", name)
                     .put("size", size)
                     .put("mime", mime.ifBlank { "application/octet-stream" })
-                    .put("sha256", digest),
+                    .put("sha256", digest)
+                    .put("open", open),
             )
             val answer = decision.get(120, TimeUnit.SECONDS)
             if (answer.optString("type") != "file_accept") {
@@ -351,7 +354,7 @@ class LinkClient(
             send(JSONObject().put("type", "file_reject").put("id", id).put("message", "Não foi possível criar o arquivo."))
             return
         }
-        incoming = Incoming(id, name, size, sha, sink, MessageDigest.getInstance("SHA-256"))
+        incoming = Incoming(id, name, size, sha, sink, MessageDigest.getInstance("SHA-256"), mime, message.optBoolean("open"))
         send(JSONObject().put("type", "file_accept").put("id", id))
         listener.onEvent("Recebendo $name…")
     }
@@ -408,6 +411,7 @@ class LinkClient(
         incoming = null
         send(JSONObject().put("type", "file_complete").put("id", id).put("ok", true).put("sha256", actual))
         listener.onEvent("Arquivo salvo: ${current.name} ($label)")
+        listener.onFileSaved(current.name, current.mime, current.sink.uri, current.open)
     }
 
     private fun failIncoming(reason: String) {
@@ -490,6 +494,8 @@ class LinkClient(
         val sha: String,
         val sink: FileSink,
         val digest: MessageDigest,
+        val mime: String,
+        val open: Boolean,
         var got: Long = 0,
         var seq: Int = 0,
         var shown: Int = -10,

@@ -7,9 +7,12 @@ import contextlib
 import logging
 import queue
 import threading
+import time
 from pathlib import Path
 
+from . import context_menu
 from .bluetooth_link import BluetoothLink
+from .control import ControlServer
 from .link_server import LinkServer
 from .store import Store
 from .system_bridge import local_ipv4s, open_path
@@ -43,9 +46,87 @@ class App:
         self._loop: asyncio.AbstractEventLoop | None = None
         self._thread: threading.Thread | None = None
         self._extras_stop = threading.Event()
+        self._menu_peers: dict[str, str] | None = None
+        self.control: ControlServer | None = None
 
     def _on_event(self, kind: str, payload: dict) -> None:
         self.events.put((kind, payload))
+
+    def start_control(self) -> bool:
+        """Abre o canal do menu de contexto. Devolve False se outra cópia já está aberta."""
+        server = ControlServer(self.handle_control)
+        try:
+            if not server.start():
+                return False
+        except OSError as exc:
+            log.warning("canal local indisponível: %s", exc)
+            return True
+        self.control = server
+        return True
+
+    def handle_control(self, message: dict) -> dict:
+        command = message.get("cmd")
+        if command == "ping":
+            return {"ok": True}
+        if command == "present":
+            self.events.put(("present", {}))
+            return {"ok": True}
+        if command == "send":
+            files = [Path(str(item)) for item in message.get("files", []) if str(item)]
+            return self.send_paths(files, str(message.get("device") or ""), bool(message.get("open", True)))
+        return {"ok": False, "message": "comando desconhecido"}
+
+    def send_paths(self, files: list[Path], device_id: str = "", open_after: bool = True, wait: float = 20) -> dict:
+        """Envia arquivos ao celular, conectando antes se ele estiver pareado mas fora do ar."""
+        files = [path for path in files if path.is_file()]
+        if not files:
+            return {"ok": False, "message": "Nenhum arquivo para enviar."}
+        target = self._online_target(device_id)
+        if target is None:
+            if device_id and device_id not in self.store.peers():
+                return {"ok": False, "message": "Esse celular não está pareado com este computador."}
+            self.server.request_connect([device_id] if device_id else list(self.store.peers()))
+            deadline = time.monotonic() + wait
+            while target is None and time.monotonic() < deadline:
+                time.sleep(0.5)
+                target = self._online_target(device_id)
+        if target is None:
+            name = self._peer_name(device_id) or "o celular"
+            return {
+                "ok": False,
+                "message": f"{name} não está conectado. Abra o Connect Linux no celular, na mesma rede.",
+            }
+        target_id, target_name = target
+        for path in files:
+            self.send_file(target_id, path, open_after=open_after)
+        if len(files) == 1:
+            text = f"Enviando {files[0].name} para {target_name}."
+        else:
+            text = f"Enviando {len(files)} arquivos para {target_name}."
+        self._log(text)
+        return {"ok": True, "message": text}
+
+    def _online_target(self, device_id: str) -> tuple[str, str] | None:
+        online = [row for row in self.snapshot() if row["online"]]
+        if device_id:
+            online = [row for row in online if row["id"] == device_id]
+        if not online:
+            return None
+        return online[0]["id"], online[0]["name"]
+
+    def _peer_name(self, device_id: str) -> str:
+        saved = self.store.peers().get(device_id) if device_id else None
+        return str(saved.get("name", "")) if isinstance(saved, dict) else ""
+
+    def sync_context_menu(self) -> None:
+        peers = {device_id: str(saved.get("name") or "celular") for device_id, saved in self.store.peers().items()}
+        if peers == self._menu_peers:
+            return
+        self._menu_peers = peers
+        try:
+            context_menu.sync(peers)
+        except OSError as exc:
+            log.info("menu de contexto: %s", exc)
 
     def start(self) -> None:
         if self._thread and self._thread.is_alive():
@@ -71,6 +152,7 @@ class App:
 
     def _watch_extras(self) -> None:
         while not self._extras_stop.is_set():
+            self.sync_context_menu()
             self._bt_status = self.bluetooth.status()
             for message in self.usb.refresh(self.server.port):
                 self._log(message)
@@ -103,6 +185,9 @@ class App:
                 self._loop.close()
 
     def stop(self) -> None:
+        if self.control is not None:
+            self.control.stop()
+            self.control = None
         self._extras_stop.set()
         self.bluetooth.stop()
         self.server.request_stop()
@@ -204,8 +289,8 @@ class App:
     def send_url(self, device_id: str, url: str) -> None:
         self._spawn(self.server.send_url(device_id, url))
 
-    def send_file(self, device_id: str, path: Path) -> None:
-        self._spawn(self.server.send_file(device_id, path))
+    def send_file(self, device_id: str, path: Path, open_after: bool = False) -> None:
+        self._spawn(self.server.send_file(device_id, path, open_after))
 
     def find_device(self, device_id: str) -> None:
         self._spawn(self.server.find_device(device_id))
