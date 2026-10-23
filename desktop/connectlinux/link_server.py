@@ -116,6 +116,12 @@ class LinkServer:
         if signal:
             signal()
 
+    def request_connect(self, targets: list[str]) -> bool:
+        """Pede aos celulares pareados para reconectar, pela descoberta na rede."""
+        if not self.enable_discovery:
+            return False
+        return self.discovery.request_connect(targets)
+
     async def wait_started(self, timeout: float = 5) -> None:
         ok = await asyncio.to_thread(self._started.wait, timeout)
         if not ok:

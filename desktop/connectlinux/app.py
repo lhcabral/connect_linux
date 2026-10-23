@@ -120,6 +120,48 @@ class App:
     def snapshot(self) -> list[dict]:
         return self.server.snapshot()
 
+    def connect_known_phones(self) -> str:
+        """Pede aos celulares já pareados para abrirem a conexão com este computador."""
+        paired = self.store.peers()
+        rows = {row["id"]: row for row in self.snapshot()}
+        if not paired:
+            visible = [row["name"] for row in rows.values() if row["seen"] and not row["online"]]
+            if len(visible) == 1:
+                return f"{visible[0]} está na rede, mas ainda não foi pareado. No celular, toque em Parear."
+            if visible:
+                return (
+                    f"{_join_names(visible)} estão na rede, mas ainda não foram pareados. "
+                    "No celular, toque em Parear."
+                )
+            return "Nenhum celular pareado. Abra o Connect Linux no celular e pareie este computador."
+
+        online: list[str] = []
+        pending: list[tuple[str, str]] = []
+        for device_id, saved in paired.items():
+            row = rows.get(device_id)
+            name = ""
+            if row and row.get("name"):
+                name = str(row["name"])
+            elif isinstance(saved, dict) and saved.get("name"):
+                name = str(saved["name"])
+            name = name or "celular"
+            if row and row["online"]:
+                online.append(name)
+            else:
+                pending.append((device_id, name))
+        if not pending:
+            return "Já conectado a " + _join_names(online) + "."
+        if not self.server.request_connect([device_id for device_id, _name in pending]):
+            return "A busca na rede ainda não está pronta. Tente de novo em alguns segundos."
+        asked = _join_names([name for _device_id, name in pending])
+        text = (
+            f"Pedindo a {asked} para conectar. "
+            "Deixe o Connect Linux aberto no celular, na mesma rede."
+        )
+        if online:
+            text += " Já conectado a " + _join_names(online) + "."
+        return text
+
     @property
     def port(self) -> int:
         return self.server.port
@@ -189,3 +231,9 @@ class App:
     def _log(self, text: str) -> None:
         self.events.put(("log", {"text": text}))
         log.info("%s", text)
+
+
+def _join_names(names: list[str]) -> str:
+    if len(names) <= 1:
+        return names[0] if names else ""
+    return ", ".join(names[:-1]) + " e " + names[-1]

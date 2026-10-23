@@ -14,6 +14,8 @@ object Protocol {
     const val VERSION = 1
     const val DISCOVERY_PORT = 17170
     const val LINK_PORT = 17171
+    // A descoberta também usa type "connect": o computador pede a este celular
+    // (campo target) para abrir a conexão. Um aplicativo antigo ignora.
     const val MULTICAST = "239.255.171.70"
     const val BLUETOOTH_UUID = "6f1c0a4e-6b9d-4c55-9a8e-2b1d7c1e5a71"
     const val MAX_FRAME = 8 * 1024 * 1024

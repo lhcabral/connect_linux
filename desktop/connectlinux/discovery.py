@@ -30,6 +30,8 @@ class Discovery:
         self.peers: dict[str, dict] = {}
         self._lock = threading.Lock()
         self.transport: asyncio.DatagramTransport | None = None
+        self._loop: asyncio.AbstractEventLoop | None = None
+        self._connect_gen = 0
         self.fatal: str | None = None
 
     def snapshot(self) -> dict[str, dict]:
@@ -52,6 +54,52 @@ class Discovery:
         }
         return json.dumps(message, ensure_ascii=False, separators=(",", ":")).encode("utf-8")
 
+    def connect_bytes(self, target: str) -> bytes:
+        """Pede ao celular `target` para abrir a conexão TCP com este computador."""
+        message = {
+            "app": APP,
+            "v": VERSION,
+            "type": "connect",
+            "id": self.device_id,
+            "name": self._name_fn(),
+            "port": self._port_fn(),
+            "platform": "linux",
+            "target": target,
+        }
+        return json.dumps(message, ensure_ascii=False, separators=(",", ":")).encode("utf-8")
+
+    def request_connect(self, targets: list[str]) -> bool:
+        """Envia o pedido na rede. Só funciona com a descoberta já em execução."""
+        loop = self._loop
+        if loop is None or self.transport is None:
+            return False
+        clean = [target for target in targets if UUID_RE.match(target)]
+        if not clean:
+            return False
+        try:
+            loop.call_soon_threadsafe(self._schedule_connect, clean)
+        except RuntimeError:
+            return False
+        return True
+
+    def _schedule_connect(self, targets: list[str]) -> None:
+        self._connect_gen += 1
+        self._send_connect_burst(targets, self._connect_gen, 3)
+
+    def _send_connect_burst(self, targets: list[str], generation: int, left: int) -> None:
+        if generation != self._connect_gen or self.transport is None or left <= 0:
+            return
+        peers = self.snapshot()
+        for target in targets:
+            payload = self.connect_bytes(target)
+            self._broadcast(payload)
+            peer = peers.get(target)
+            host = str(peer.get("host") or "") if peer else ""
+            if host:
+                self._send(payload, (host, DISCOVERY_PORT))
+        if left > 1:
+            asyncio.get_running_loop().call_later(0.6, self._send_connect_burst, targets, generation, left - 1)
+
     async def run(self) -> None:
         loop = asyncio.get_running_loop()
         try:
@@ -67,6 +115,7 @@ class Discovery:
             return
 
         self.transport = transport
+        self._loop = asyncio.get_running_loop()
         sock = transport.get_extra_info("socket")
         if isinstance(sock, socket.socket):
             sock.setsockopt(socket.SOL_SOCKET, socket.SO_BROADCAST, 1)
@@ -92,6 +141,7 @@ class Discovery:
         finally:
             transport.close()
             self.transport = None
+            self._loop = None
 
     def handle_packet(self, data: bytes, addr: tuple) -> None:
         if len(data) > 2048:

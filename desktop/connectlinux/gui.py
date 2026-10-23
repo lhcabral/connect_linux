@@ -2,11 +2,17 @@
 
 from __future__ import annotations
 
+import os
+import queue
+import shutil
+import subprocess
 import tkinter as tk
 from pathlib import Path
 from tkinter import filedialog, messagebox, simpledialog, ttk
 
 from .app import App
+from .system_bridge import notify
+from .tray import TrayIcon
 
 
 class DesktopWindow:
@@ -14,8 +20,20 @@ class DesktopWindow:
         self.app = app
         self._alive = True
         self._loading = True
+        self._told_hide = False
         self._rows: list[dict] = []
         self._codes: dict[str, tuple[str, str]] = {}
+        self._actions: queue.Queue = queue.Queue()
+        self._tray = TrayIcon(
+            on_present=lambda: self._post(self._present),
+            on_connect=lambda: self._post(self._connect_phone),
+            on_minimize=lambda: self._post(self._minimize),
+            on_maximize=lambda: self._post(self._maximize),
+            on_quit=lambda: self._post(self._quit),
+        )
+        self._tray_ok = self._tray.start()
+        if not self._tray_ok:
+            self._tray = None
 
         self.root = tk.Tk()
         self.root.title("Connect Linux")
@@ -24,8 +42,11 @@ class DesktopWindow:
         self._apply_theme()
         self._build()
         self._loading = False
-        self.root.protocol("WM_DELETE_WINDOW", self.close)
+        self.root.protocol("WM_DELETE_WINDOW", self._on_close)
         self.root.after(200, self.refresh)
+        self.root.after(150, self._poll_actions)
+        if not self._tray_ok:
+            self._append_log("Ícone ao lado do relógio indisponível. Fechar a janela encerra o programa.")
 
     def _apply_theme(self) -> None:
         background = "#F3F6F1"
@@ -67,7 +88,7 @@ class DesktopWindow:
         ttk.Label(header, text="Connect Linux", style="Title.TLabel").pack(anchor="w")
         ttk.Label(
             header,
-            text="Deixe o celular na mesma rede Wi-Fi e abra o aplicativo Connect Linux.",
+            text="Deixe o celular na mesma rede Wi-Fi e abra o aplicativo Connect Linux. Fechar esta janela deixa o programa ao lado do relógio.",
             style="Hint.TLabel",
         ).pack(anchor="w", pady=(2, 8))
 
@@ -177,6 +198,8 @@ class DesktopWindow:
         self._rows = self.app.snapshot()
         self._render_devices()
         self._render_status()
+        if self._tray is not None:
+            self._tray.set_tooltip(self._tray_text())
         self.root.after(400, self.refresh)
 
     def _render_status(self) -> None:
@@ -343,8 +366,87 @@ class DesktopWindow:
         self.app.set_download_dir(Path(chosen))
         self.folder_label.set(str(self.app.store.download_dir))
 
-    def close(self) -> None:
+    def _tray_text(self) -> str:
+        online = [row["name"] for row in self._rows if row.get("online")]
+        if online:
+            return "Connect Linux: conectado a " + ", ".join(online)
+        if self.app.fatal:
+            return "Connect Linux: " + self.app.fatal
+        return "Connect Linux: aguardando o celular"
+
+    def _post(self, action) -> None:
+        self._actions.put(action)
+
+    def _poll_actions(self) -> None:
+        if not self._alive:
+            return
+        while True:
+            try:
+                action = self._actions.get_nowait()
+            except queue.Empty:
+                break
+            action()
+            if not self._alive:
+                return
+        self.root.after(150, self._poll_actions)
+
+    def _on_close(self) -> None:
+        if self._tray_ok:
+            self._hide()
+            return
+        self._quit()
+
+    def _hide(self) -> None:
+        self.root.withdraw()
+        if self._told_hide:
+            return
+        self._told_hide = True
+        notify(
+            "Connect Linux",
+            "Continua ao lado do relógio. Clique com o direito no ícone para conectar, minimizar, maximizar ou sair.",
+        )
+
+    def _present(self) -> None:
+        try:
+            self.root.state("normal")
+        except tk.TclError:
+            self.root.deiconify()
+        self.root.deiconify()
+        self.root.lift()
+        self.root.focus_force()
+
+    def _minimize(self) -> None:
+        self.root.deiconify()
+        self.root.update_idletasks()
+        try:
+            self.root.state("iconic")
+        except tk.TclError:
+            try:
+                self.root.iconify()
+            except tk.TclError:
+                return
+
+    def _maximize(self) -> None:
+        self.root.deiconify()
+        self.root.update_idletasks()
+        _request_maximize(self.root)
+        self.root.lift()
+        self.root.focus_force()
+
+    def _connect_phone(self) -> None:
+        message = self.app.connect_known_phones()
+        self._append_log(message)
+        if not self.root.winfo_viewable():
+            notify("Connect Linux", message)
+
+    def _quit(self) -> None:
+        if not self._alive:
+            return
         self._alive = False
+        tray = self._tray
+        self._tray = None
+        if tray is not None:
+            tray.stop()
         self.app.stop()
         self.root.destroy()
 
@@ -376,3 +478,49 @@ def _ask_text(parent: tk.Tk) -> str | None:
 
 def run_gui(app: App) -> None:
     DesktopWindow(app).root.mainloop()
+
+
+def _request_maximize(root: tk.Tk) -> None:
+    try:
+        root.state("zoomed")
+        return
+    except tk.TclError:
+        pass
+    if not shutil.which("wmctrl"):
+        _fill_screen(root)
+        return
+    window = _frame_window(root)
+    if window is None:
+        _fill_screen(root)
+        return
+    done = subprocess.run(
+        ["wmctrl", "-ir", window, "-b", "add,maximized_vert,maximized_horz"],
+        check=False,
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+        timeout=2,
+    )
+    if done.returncode != 0:
+        _fill_screen(root)
+
+
+def _frame_window(root: tk.Tk) -> str | None:
+    try:
+        listing = subprocess.check_output(["wmctrl", "-lp"], text=True, timeout=2)
+    except (OSError, subprocess.TimeoutExpired):
+        return None
+    pid = str(os.getpid())
+    title = root.title()
+    fallback = None
+    for line in listing.splitlines():
+        parts = line.split(None, 4)
+        if len(parts) < 5 or parts[4] != title:
+            continue
+        if parts[2] == pid:
+            return parts[0]
+        fallback = parts[0]
+    return fallback
+
+
+def _fill_screen(root: tk.Tk) -> None:
+    root.geometry(f"{root.winfo_screenwidth()}x{root.winfo_screenheight()}+0+0")

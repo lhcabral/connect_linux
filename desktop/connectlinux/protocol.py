@@ -16,6 +16,8 @@ APP = "connectlinux"
 VERSION = 1
 DISCOVERY_PORT = 17170
 LINK_PORT = 17171
+# A descoberta também usa type "connect": o computador pede ao celular
+# indicado em "target" para abrir a conexão. Um celular antigo ignora.
 MULTICAST_GROUP = "239.255.171.70"
 BLUETOOTH_UUID = "6f1c0a4e-6b9d-4c55-9a8e-2b1d7c1e5a71"
 BLUETOOTH_CHANNEL = 22

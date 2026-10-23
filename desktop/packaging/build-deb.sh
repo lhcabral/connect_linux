@@ -50,7 +50,7 @@ Section: net
 Priority: optional
 Architecture: all
 Depends: python3 (>= 3.10), python3-tk, python3-dbus, python3-gi, libnotify-bin, xclip | wl-clipboard
-Recommends: bluez, adb
+Recommends: bluez, adb, gir1.2-xapp-1.0
 Maintainer: Luiz Henrique <luizhenrique.be@gmail.com>
 Description: Conecta o Linux a um celular Android
  Pareamento por código, envio de texto, links e arquivos, área de

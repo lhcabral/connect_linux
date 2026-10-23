@@ -5,12 +5,14 @@ from __future__ import annotations
 import asyncio
 import base64
 import hashlib
+import json
 import tempfile
 import time
 import unittest
 import uuid
 from pathlib import Path
 
+from connectlinux.discovery import Discovery
 from connectlinux.link_server import LinkServer, read_message
 from connectlinux.protocol import decode_payload, encode_message, frame_size
 from connectlinux.store import Store
@@ -287,6 +289,44 @@ class _Peer:
                 raise ConnectionError(kind)
             if message.get("type") == kind:
                 return message
+
+
+class DiscoveryTests(unittest.TestCase):
+    def test_connect_invite_names_the_phone(self) -> None:
+        phone = "22222222-2222-2222-2222-222222222222"
+        discovery = Discovery("11111111-1111-1111-1111-111111111111", lambda: "PC", lambda: 17171)
+        message = json.loads(discovery.connect_bytes(phone))
+        self.assertEqual(message["type"], "connect")
+        self.assertEqual(message["platform"], "linux")
+        self.assertEqual(message["target"], phone)
+        self.assertEqual(message["port"], 17171)
+        self.assertFalse(discovery.request_connect([phone]))
+
+    def test_connect_packet_is_not_a_peer(self) -> None:
+        discovery = Discovery("11111111-1111-1111-1111-111111111111", lambda: "PC", lambda: 17171)
+        foreign = json.dumps(
+            {
+                "app": "connectlinux",
+                "v": 1,
+                "type": "connect",
+                "id": "33333333-3333-3333-3333-333333333333",
+                "name": "Outro",
+                "port": 17171,
+                "platform": "linux",
+                "target": "22222222-2222-2222-2222-222222222222",
+            },
+            separators=(",", ":"),
+        ).encode()
+        discovery.handle_packet(foreign, ("192.168.0.8", 17170))
+        self.assertEqual(discovery.snapshot(), {})
+
+    def test_connect_explains_when_nothing_is_paired(self) -> None:
+        from connectlinux.app import App
+
+        with tempfile.TemporaryDirectory() as temporary:
+            store = Store(path=Path(temporary) / "config.json")
+            app = App(store=store, enable_discovery=False, enable_extras=False)
+            self.assertIn("Nenhum celular pareado", app.connect_known_phones())
 
 
 if __name__ == "__main__":

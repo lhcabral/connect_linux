@@ -17,6 +17,7 @@ class DiscoveryClient(
     private val deviceId: String,
     private val nameProvider: () -> String,
     private val onAnnounce: (id: String, name: String, host: String, port: Int) -> Unit,
+    private val onConnectRequest: (id: String, name: String, host: String, port: Int) -> Unit,
     private val onFailure: (String) -> Unit,
 ) {
     private val wifi = context.applicationContext.getSystemService(Context.WIFI_SERVICE) as WifiManager
@@ -109,6 +110,16 @@ class DiscoveryClient(
         if (message.optString("id") == deviceId) return
         when (message.optString("type")) {
             "discover" -> sendTo(opened, announce(), packet.address.hostAddress ?: return, Protocol.DISCOVERY_PORT)
+            "connect" -> {
+                if (message.optString("platform") != "linux") return
+                val id = message.optString("id")
+                val port = message.optInt("port", 0)
+                val host = packet.address.hostAddress ?: return
+                val target = message.optString("target")
+                if (target.isNotEmpty() && target != deviceId) return
+                if (!Protocol.isDeviceId(id) || port !in 1..65535) return
+                onConnectRequest(id, Protocol.sanitizeName(message.optString("name")), host, port)
+            }
             "announce" -> {
                 if (message.optString("platform") != "linux") return
                 val id = message.optString("id")

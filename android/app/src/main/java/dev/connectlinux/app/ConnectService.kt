@@ -57,6 +57,7 @@ class ConnectService : Service() {
     private var forceNext = false
     private var lastNotice = ""
     private var lastNoticeAt = 0L
+    private var lastConnectRequestAt = 0L
     private lateinit var discovery: DiscoveryClient
 
     override fun onCreate() {
@@ -75,6 +76,9 @@ class ConnectService : Service() {
             nameProvider = { store.deviceName },
             onAnnounce = { id, name, host, port ->
                 commands.execute { noteAnnounce(id, name, host, port) }
+            },
+            onConnectRequest = { id, name, host, port ->
+                commands.execute { noteConnectRequest(id, name, host, port) }
             },
             onFailure = { message ->
                 commands.execute {
@@ -387,6 +391,28 @@ class ConnectService : Service() {
             }
         }
         publish()
+    }
+
+    private fun noteConnectRequest(id: String, name: String, host: String, port: Int) {
+        val saved = store.pairing(id) ?: return
+        val recent = seen[id]
+        val recentOk = recent != null && recent.host == host && SystemClock.elapsedRealtime() - recent.at < 15_000
+        if (!recentOk && saved.host != host) return
+        val now = SystemClock.elapsedRealtime()
+        seen[id] = Seen(id, name.ifBlank { saved.name }, host, port, now)
+        userDisconnect = false
+        authBlocked = false
+        val target = Target.Network(host, port)
+        if (now - lastConnectRequestAt < 2500 && link != null && desired == target) return
+        lastConnectRequestAt = now
+        desired = target
+        forceNext = false
+        val old = link
+        link = null
+        ready = false
+        generation.incrementAndGet()
+        old?.close()
+        startLink()
     }
 
     private fun startLink() {
