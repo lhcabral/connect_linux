@@ -65,6 +65,7 @@ Depois do primeiro pareamento, o celular reconecta sozinho pelo mesmo caminho.
 - Ver a bateria e chamar o outro aparelho (som no computador, vibração no celular).
 - Compartilhar do celular pelo menu Compartilhar do Android.
 - Abrir uma imagem na tela do outro aparelho (veja abaixo).
+- Iniciar junto com o Linux, só com o ícone ao lado do relógio. Vem ligado depois da primeira vez que o programa é aberto; para desligar, desmarque **Iniciar com o Linux** na janela.
 
 ### Abrir uma imagem na tela do outro aparelho
 

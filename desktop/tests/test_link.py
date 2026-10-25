@@ -399,6 +399,21 @@ class DesktopIntegrationTests(unittest.TestCase):
             self.assertFalse(action.exists())
             self.assertFalse(entry.exists())
 
+    def test_autostart_on_by_default_and_respects_opt_out(self) -> None:
+        from connectlinux import autostart
+
+        with tempfile.TemporaryDirectory() as temporary:
+            entry = Path(temporary) / "autostart" / "connectlinux.desktop"
+            self.assertFalse(autostart.is_enabled(entry))
+            autostart.ensure_default(entry)
+            self.assertTrue(autostart.is_enabled(entry))
+            self.assertIn(" --background", entry.read_text(encoding="utf-8"))
+            self.assertTrue(autostart.set_enabled(False, entry))
+            autostart.ensure_default(entry)
+            self.assertFalse(autostart.is_enabled(entry))
+            entry.write_text(entry.read_text(encoding="utf-8").replace("Hidden=true", "Hidden=false"), encoding="utf-8")
+            self.assertFalse(autostart.is_enabled(entry))
+
     def test_control_socket_roundtrip(self) -> None:
         from connectlinux import control
 

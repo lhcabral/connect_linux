@@ -12,7 +12,7 @@ import tkinter.font as tkfont
 from pathlib import Path
 from tkinter import filedialog, messagebox, simpledialog, ttk
 
-from . import __version__, pix, updater
+from . import __version__, autostart, pix, updater
 from .app import App
 from .system_bridge import notify
 from .tray import TrayIcon
@@ -182,6 +182,13 @@ class DesktopWindow:
             variable=self.note_var,
             command=self._toggle_notes,
         ).pack(side="left", padx=(16, 0))
+        self.autostart_var = tk.BooleanVar(value=autostart.is_enabled())
+        ttk.Checkbutton(
+            options,
+            text="Iniciar com o Linux",
+            variable=self.autostart_var,
+            command=self._toggle_autostart,
+        ).pack(side="left", padx=(16, 0))
 
         folder = ttk.Frame(outer)
         folder.grid(row=6, column=0, sticky="ew", pady=(8, 0))
@@ -314,6 +321,18 @@ class DesktopWindow:
 
     def _toggle_notes(self) -> None:
         self.app.set_show_notifications(bool(self.note_var.get()))
+
+    def _toggle_autostart(self) -> None:
+        wanted = bool(self.autostart_var.get())
+        if not autostart.set_enabled(wanted):
+            self.autostart_var.set(not wanted)
+            messagebox.showerror("Connect Linux", "Não foi possível mudar a inicialização automática.")
+            return
+        self._append_log(
+            "O Connect Linux vai iniciar com o Linux, ao lado do relógio."
+            if wanted
+            else "O Connect Linux não vai mais iniciar com o Linux."
+        )
 
     def _target(self) -> str | None:
         selected = self.tree.selection()
@@ -669,6 +688,7 @@ def _ask_text(parent: tk.Tk) -> str | None:
 
 
 def run_gui(app: App, start_hidden: bool = False) -> None:
+    autostart.ensure_default()
     window = DesktopWindow(app)
     if start_hidden and window._tray_ok:
         window._told_hide = True
