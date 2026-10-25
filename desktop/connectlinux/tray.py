@@ -1,148 +1,109 @@
-"""Ícone do Connect Linux na bandeja do Linux Mint, ao lado do relógio."""
+"""Ícone do Connect Linux na bandeja do Linux Mint, ao lado do relógio.
+
+Roda no laço principal do GTK, na mesma thread da janela.
+"""
 
 from __future__ import annotations
 
-import ctypes
 import logging
 import struct
-import threading
 import zlib
 from pathlib import Path
 
+import gi
+
+gi.require_version("Gtk", "3.0")
+from gi.repository import GLib, Gtk  # noqa: E402
+
 log = logging.getLogger("connectlinux")
+
+XAPP_WAIT_MS = 1200
 
 
 class TrayIcon:
     """Fica visível o tempo todo. O botão direito abre o menu."""
 
-    def __init__(
-        self,
-        on_present,
-        on_connect,
-        on_minimize,
-        on_maximize,
-        on_quit,
-    ) -> None:
+    def __init__(self, on_present, on_connect, on_minimize, on_maximize, on_quit, on_ready) -> None:
         self._on_present = on_present
         self._on_connect = on_connect
         self._on_minimize = on_minimize
         self._on_maximize = on_maximize
         self._on_quit = on_quit
-        self._ready = threading.Event()
-        self._thread: threading.Thread | None = None
-        self._loop = None
-        self._idle = None
+        self._on_ready = on_ready
         self._icon = None
-        self._menu = None
         self._gtk_status = None
+        self._menu = None
         self._tooltip = ""
-        self.error: str | None = None
+        self._decided = False
         self.supported = False
 
-    def start(self) -> bool:
-        _enable_x11_threads()
-        self._thread = threading.Thread(target=self._run, name="connectlinux-tray", daemon=True)
-        self._thread.start()
-        self._ready.wait(4)
-        if self.error or not self.supported:
-            self.stop()
-            return False
-        return True
+    def start(self) -> None:
+        """Mostra o ícone. `on_ready(suportado)` é chamado uma vez, logo ou em até XAPP_WAIT_MS."""
+        try:
+            icon_file = icon_path()
+            self._menu = self._build_menu()
+            if self._try_xapp(icon_file):
+                GLib.timeout_add(XAPP_WAIT_MS, self._finish_wait)
+                return
+            if not self._try_ayatana(icon_file):
+                self._try_gtk_status(icon_file)
+            self._decide(True)
+        except Exception as exc:
+            log.warning("Ícone ao lado do relógio indisponível: %s", exc)
+            self._decide(False)
 
     def stop(self) -> None:
-        idle = self._idle
-        loop = self._loop
+        icon = self._icon
+        self._icon = None
+        if icon is not None and hasattr(icon, "set_visible"):
+            icon.set_visible(False)
+        elif icon is not None:
+            from gi.repository import AyatanaAppIndicator3
 
-        def _quit_loop() -> bool:
-            if loop is not None and loop.is_running():
-                loop.quit()
-            return False
-
-        if idle is not None:
-            idle(_quit_loop)
-        thread = self._thread
-        if thread is not None and thread.is_alive() and thread is not threading.current_thread():
-            thread.join(timeout=2)
+            icon.set_status(AyatanaAppIndicator3.IndicatorStatus.PASSIVE)
+        if self._gtk_status is not None:
+            self._gtk_status.set_visible(False)
+            self._gtk_status = None
 
     def set_tooltip(self, text: str) -> None:
         if text == self._tooltip:
             return
         self._tooltip = text
-        self._invoke(lambda: self._apply_tooltip(text))
+        safe = text.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
+        icon = self._icon
+        if icon is not None and hasattr(icon, "set_tooltip_text"):
+            icon.set_tooltip_text(safe)
+        elif self._gtk_status is not None:
+            self._gtk_status.set_tooltip_text(text)
 
-    def _invoke(self, fn) -> None:
-        idle = self._idle
-
-        def wrapper() -> bool:
-            try:
-                fn()
-            except Exception:
-                log.exception("bandeja")
-            return False
-
-        if idle is not None:
-            idle(wrapper)
-
-    def _run(self) -> None:
-        try:
-            self._setup()
-        except Exception as exc:
-            self.error = str(exc)
-            log.warning("Ícone ao lado do relógio indisponível: %s", exc)
-        if self._loop is not None and self.error is None:
-            self._loop.run()
-        if not self._ready.is_set():
-            self._ready.set()
-
-    def _setup(self) -> None:
-        import gi
-
-        gi.require_version("Gtk", "3.0")
-        from gi.repository import GLib, Gtk
-
-        if not Gtk.init_check([]):
-            raise RuntimeError("o ambiente gráfico não está disponível")
-
-        self._idle = GLib.idle_add
-        self._loop = GLib.MainLoop()
-        icon_file = _icon_file()
-        menu = self._build_menu(Gtk)
-        self._menu = menu
-
-        if self._try_xapp(menu, icon_file):
-            GLib.timeout_add(1200, self._finish_wait)
+    def _decide(self, supported: bool) -> None:
+        if self._decided:
             return
-        if self._try_ayatana(menu, icon_file):
-            self.supported = True
-            self._ready.set()
-            return
-        self._try_gtk_status(Gtk, menu, icon_file)
-        self.supported = True
-        self._ready.set()
+        self._decided = True
+        self.supported = supported
+        self._on_ready(supported)
 
-    def _build_menu(self, gtk):
-        menu = gtk.Menu()
+    def _build_menu(self):
+        menu = Gtk.Menu()
         entries = (
+            ("Abrir o Connect Linux", self._on_present),
             ("Conectar", self._on_connect),
             ("Minimizar", self._on_minimize),
             ("Maximizar", self._on_maximize),
-            ("Sair", self._on_quit),
         )
-        for label, callback in entries[:-1]:
-            item = gtk.MenuItem.new_with_label(label)
+        for label, callback in entries:
+            item = Gtk.MenuItem.new_with_label(label)
             item.connect("activate", lambda _item, action=callback: action())
             menu.append(item)
-        menu.append(gtk.SeparatorMenuItem())
-        leave = gtk.MenuItem.new_with_label(entries[-1][0])
-        leave.connect("activate", lambda _item, action=entries[-1][1]: action())
+        menu.append(Gtk.SeparatorMenuItem())
+        leave = Gtk.MenuItem.new_with_label("Sair")
+        leave.connect("activate", lambda _item: self._on_quit())
         menu.append(leave)
         menu.show_all()
         return menu
 
-    def _try_xapp(self, menu, icon_file: str) -> bool:
+    def _try_xapp(self, icon_file: str) -> bool:
         try:
-            import gi
-
             gi.require_version("XApp", "1.0")
             from gi.repository import XApp
         except (ImportError, ValueError):
@@ -152,43 +113,26 @@ class TrayIcon:
         icon.set_icon_name(icon_file)
         icon.set_tooltip_text("Connect Linux")
         icon.set_visible(True)
-        icon.set_secondary_menu(menu)
+        icon.set_secondary_menu(self._menu)
         icon.connect("activate", lambda *_args: self._on_present())
-        icon.connect("state-changed", self._on_xapp_state)
+        icon.connect("state-changed", lambda _icon, state: self._xapp_state(state))
         self._icon = icon
-        state = icon.get_state()
-        if state != XApp.StatusIconState.NO_SUPPORT:
-            self.supported = True
-            self._ready.set()
+        self._xapp_state(icon.get_state())
         return True
 
-    def _on_xapp_state(self, icon, state) -> None:
-        import gi
-
-        gi.require_version("XApp", "1.0")
+    def _xapp_state(self, state) -> None:
         from gi.repository import XApp
 
-        self.supported = state != XApp.StatusIconState.NO_SUPPORT
-        if self.supported:
-            self._ready.set()
+        if state != XApp.StatusIconState.NO_SUPPORT:
+            self._decide(True)
 
     def _finish_wait(self) -> bool:
-        icon = self._icon
-        if icon is not None and hasattr(icon, "get_state"):
-            import gi
-
-            gi.require_version("XApp", "1.0")
-            from gi.repository import XApp
-
-            self.supported = icon.get_state() != XApp.StatusIconState.NO_SUPPORT
-        if not self._ready.is_set():
-            self._ready.set()
+        if not self._decided:
+            self._decide(False)
         return False
 
-    def _try_ayatana(self, menu, icon_file: str) -> bool:
+    def _try_ayatana(self, icon_file: str) -> bool:
         try:
-            import gi
-
             gi.require_version("AyatanaAppIndicator3", "0.1")
             from gi.repository import AyatanaAppIndicator3
         except (ImportError, ValueError):
@@ -200,39 +144,23 @@ class TrayIcon:
         )
         indicator.set_status(AyatanaAppIndicator3.IndicatorStatus.ACTIVE)
         indicator.set_title("Connect Linux")
-        indicator.set_menu(menu)
+        indicator.set_menu(self._menu)
         self._icon = indicator
         return True
 
-    def _try_gtk_status(self, gtk, menu, icon_file: str) -> None:
-        status = gtk.StatusIcon.new_from_file(icon_file)
+    def _try_gtk_status(self, icon_file: str) -> None:
+        status = Gtk.StatusIcon.new_from_file(icon_file)
         status.set_tooltip_text("Connect Linux")
         status.set_visible(True)
         status.connect("activate", lambda *_args: self._on_present())
-        status.connect("popup-menu", lambda _icon, button, when: self._popup_gtk(menu, status, button, when))
+        status.connect(
+            "popup-menu",
+            lambda _icon, button, when: self._menu.popup(None, None, status.position_menu, status, button, when),
+        )
         self._gtk_status = status
 
-    def _popup_gtk(self, menu, status, button, when) -> None:
-        menu.popup(None, None, status.position_menu, status, button, when)
 
-    def _apply_tooltip(self, text: str) -> None:
-        safe = text.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
-        icon = self._icon
-        if icon is not None and hasattr(icon, "set_tooltip_text"):
-            icon.set_tooltip_text(safe)
-            return
-        if self._gtk_status is not None:
-            self._gtk_status.set_tooltip_text(text)
-
-
-def _enable_x11_threads() -> None:
-    try:
-        ctypes.CDLL("libX11.so.6").XInitThreads()
-    except OSError:
-        pass
-
-
-def _icon_file() -> str:
+def icon_path() -> str:
     for candidate in (
         Path("/usr/share/icons/hicolor/128x128/apps/connectlinux.png"),
         Path(__file__).resolve().parents[1] / "icon.png",

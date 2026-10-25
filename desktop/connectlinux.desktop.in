@@ -10,4 +10,5 @@ Icon=__ROOT__/icon.png
 Terminal=false
 Categories=Network;Utility;
 StartupNotify=true
+StartupWMClass=connectlinux
 Keywords=android;celular;telefone;clipboard;arquivo;

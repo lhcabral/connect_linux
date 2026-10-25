@@ -40,6 +40,7 @@ Icon=connectlinux
 Terminal=false
 Categories=Network;Utility;
 StartupNotify=true
+StartupWMClass=connectlinux
 Keywords=android;celular;telefone;bluetooth;clipboard;arquivo;
 EOF
 
@@ -49,7 +50,7 @@ Version: $VERSION
 Section: net
 Priority: optional
 Architecture: all
-Depends: python3 (>= 3.10), python3-tk, python3-dbus, python3-gi, python3-qrcode, libnotify-bin, xclip | wl-clipboard
+Depends: python3 (>= 3.10), python3-gi, python3-gi-cairo, gir1.2-gtk-3.0, python3-dbus, python3-qrcode, libnotify-bin, xclip | wl-clipboard
 Recommends: bluez, adb, gir1.2-xapp-1.0
 Maintainer: Luiz Henrique <luizhenrique.be@gmail.com>
 Description: Conecta o Linux a um celular Android

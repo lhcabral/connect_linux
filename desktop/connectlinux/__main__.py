@@ -12,7 +12,7 @@ import sys
 import time
 from pathlib import Path
 
-from . import __version__, control
+from . import __version__, bluetooth_link, control
 from .app import App
 from .protocol import LINK_PORT
 from .store import Store
@@ -47,25 +47,28 @@ def main(argv: list[str] | None = None) -> int:
             control.request({"cmd": "present"}, timeout=5)
         print("O Connect Linux já está aberto.")
         return 0
+
+    run_gui = None if args.headless else _load_gui()
+    if run_gui is not None:
+        bluetooth_link.SHARED_MAIN_LOOP = True
     app.start()
-
-    if args.headless:
+    if run_gui is None:
         return _headless(app)
-
-    try:
-        from .gui import run_gui
-    except ImportError as exc:
-        print(f"Interface gráfica indisponível ({exc}). Continuando no terminal.")
-        print("No Linux Mint: sudo apt install python3-tk")
-        return _headless(app)
-
-    try:
-        run_gui(app, start_hidden=args.background)
-    except tk_missing() as exc:
-        print(f"Interface gráfica indisponível ({exc}). Continuando no terminal.")
-        print("No Linux Mint: sudo apt install python3-tk")
-        return _headless(app)
+    run_gui(app, start_hidden=args.background)
     return 0
+
+
+def _load_gui():
+    try:
+        from . import gui
+    except (ImportError, ValueError) as exc:
+        print(f"Interface gráfica indisponível ({exc}). Continuando no terminal.")
+        print("No Linux Mint: sudo apt install python3-gi gir1.2-gtk-3.0")
+        return None
+    if not gui.available():
+        print("Ambiente gráfico indisponível. Continuando no terminal.")
+        return None
+    return gui.run_gui
 
 
 def _send_command(files: list[Path], device_id: str) -> int:
@@ -106,14 +109,6 @@ def _launch_background() -> None:
         stderr=subprocess.DEVNULL,
         start_new_session=True,
     )
-
-
-def tk_missing() -> tuple[type[BaseException], ...]:
-    try:
-        import tkinter
-    except Exception:
-        return (Exception,)
-    return (tkinter.TclError,)
 
 
 def _headless(app: App) -> int:

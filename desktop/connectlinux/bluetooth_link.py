@@ -17,11 +17,16 @@ log = logging.getLogger("connectlinux")
 
 _PROFILE_PATH = "/dev/connectlinux/profile"
 
+# Com a janela GTK aberta, o laço principal dela atende o D-Bus. Rodar outro
+# GLib.MainLoop no contexto padrão em outra thread travaria a janela.
+SHARED_MAIN_LOOP = False
+
 
 class BluetoothLink:
     def __init__(self, on_socket: Callable[[socket.socket, str], None]) -> None:
         self._on_socket = on_socket
         self._loop = None
+        self._manager = None
         self._bus = None
         self._thread: threading.Thread | None = None
         self._ready = threading.Event()
@@ -39,6 +44,15 @@ class BluetoothLink:
         loop = self._loop
         if loop is not None:
             loop.quit()
+            return
+        manager = self._manager
+        self._manager = None
+        if manager is not None:
+            self.registered = False
+            try:
+                manager.UnregisterProfile(_PROFILE_PATH)
+            except Exception:
+                pass
 
     def status(self) -> dict:
         info = {"available": False, "powered": False, "registered": self.registered, "name": "", "error": self.error}
@@ -134,6 +148,10 @@ class BluetoothLink:
         self.registered = True
         self.error = None
         log.info("Serviço Bluetooth registrado no canal %s.", BLUETOOTH_CHANNEL)
+        if SHARED_MAIN_LOOP:
+            self._manager = manager
+            self._ready.set()
+            return
         self._loop = GLib.MainLoop()
         self._ready.set()
         try:

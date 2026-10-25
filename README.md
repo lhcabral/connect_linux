@@ -128,7 +128,7 @@ O programa é Python puro (3.10 ou mais novo), na pasta `desktop`.
 
 ```bash
 cd desktop
-sudo apt install python3-tk python3-dbus python3-gi python3-qrcode xclip libnotify-bin
+sudo apt install python3-gi python3-gi-cairo gir1.2-gtk-3.0 python3-dbus python3-qrcode xclip libnotify-bin
 ./run.sh              # abre a janela
 ./run.sh --headless   # roda no terminal, sem janela
 python3 -m unittest discover -s tests

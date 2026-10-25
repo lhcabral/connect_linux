@@ -9,8 +9,8 @@ if command -v update-desktop-database >/dev/null 2>&1; then
   update-desktop-database "$APPS" >/dev/null 2>&1 || true
 fi
 echo "Atalho instalado. Procure por Connect Linux no menu do Mint."
-if ! python3 -c "import tkinter" >/dev/null 2>&1; then
-  echo "Para a janela: sudo apt install python3-tk"
+if ! python3 -c "import gi; gi.require_version('Gtk', '3.0'); from gi.repository import Gtk; import cairo" >/dev/null 2>&1; then
+  echo "Para a janela: sudo apt install python3-gi python3-gi-cairo gir1.2-gtk-3.0"
 fi
 if ! command -v xclip >/dev/null 2>&1 && ! command -v wl-copy >/dev/null 2>&1; then
   echo "Para a área de transferência: sudo apt install xclip"
