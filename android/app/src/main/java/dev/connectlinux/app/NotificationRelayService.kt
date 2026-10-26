@@ -20,6 +20,6 @@ class NotificationRelayService : NotificationListenerService() {
         } catch (_: Exception) {
             sbn.packageName
         }
-        ConnectService.instance?.relayNotification(appName, title, body)
+        ConnectService.instance?.relayNotification(sbn.packageName, appName, title, body)
     }
 }

@@ -446,8 +446,9 @@ class ConnectService : Service() {
         update { it.copy(forwardNotifications = enabled) }
     }
 
-    fun relayNotification(appName: String, title: String, body: String) {
+    fun relayNotification(packageName: String, appName: String, title: String, body: String) {
         if (!store.forwardNotifications || !ready) return
+        if (!MessagingApps.isMessaging(this, packageName) || !store.notificationAppEnabled(packageName)) return
         val stamp = "$appName|$title|$body"
         val now = SystemClock.elapsedRealtime()
         if (stamp == lastNotice && now - lastNoticeAt < 2500) return

@@ -27,6 +27,14 @@
             <action android:name="android.intent.action.VIEW" />
             <data android:scheme="https" />
         </intent>
+        <intent>
+            <action android:name="android.intent.action.MAIN" />
+            <category android:name="android.intent.category.LAUNCHER" />
+        </intent>
+        <intent>
+            <action android:name="android.intent.action.SENDTO" />
+            <data android:scheme="smsto" />
+        </intent>
     </queries>
 
     <application
@@ -60,6 +68,11 @@
                 android:name="android.app.shortcuts"
                 android:resource="@xml/shortcuts" />
         </activity>
+
+        <activity
+            android:name=".NotificationAppsActivity"
+            android:exported="false"
+            android:label="Apps que enviam notificações" />
 
         <activity
             android:name=".ShareToComputerActivity"

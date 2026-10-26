@@ -40,6 +40,15 @@ class DeviceStore(context: Context) {
             prefs.edit().putBoolean(KEY_NOTIFICATIONS, value).apply()
         }
 
+    fun notificationAppEnabled(packageName: String): Boolean =
+        packageName !in prefs.getStringSet(KEY_MUTED_APPS, emptySet()).orEmpty()
+
+    fun setNotificationAppEnabled(packageName: String, enabled: Boolean) = synchronized(lock) {
+        val muted = prefs.getStringSet(KEY_MUTED_APPS, emptySet()).orEmpty().toMutableSet()
+        if (enabled) muted.remove(packageName) else muted.add(packageName)
+        prefs.edit().putStringSet(KEY_MUTED_APPS, muted).apply()
+    }
+
     var lastDesktopId: String?
         get() = prefs.getString(KEY_LAST, null)
         set(value) {
@@ -134,6 +143,7 @@ class DeviceStore(context: Context) {
         const val KEY_NAME = "device_name"
         const val KEY_CLIPBOARD = "clipboard"
         const val KEY_NOTIFICATIONS = "notifications"
+        const val KEY_MUTED_APPS = "muted_notification_apps"
         const val KEY_LAST = "last_desktop"
         const val KEY_TARGET = "last_target"
         const val KEY_PAIRS = "pairs"

@@ -160,6 +160,9 @@ class MainActivity : AppCompatActivity() {
         binding.openNotifSettings.setOnClickListener {
             startActivity(Intent(Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS))
         }
+        binding.chooseNotifApps.setOnClickListener {
+            startActivity(Intent(this, NotificationAppsActivity::class.java))
+        }
         binding.openBatterySettings.setOnClickListener {
             startActivity(Intent(Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS))
         }
