@@ -1,344 +1,637 @@
 <?xml version="1.0" encoding="utf-8"?>
-<ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
     android:background="@color/bg"
-    android:fillViewport="true">
+    android:orientation="vertical">
 
-    <LinearLayout
+    <FrameLayout
+        android:id="@+id/toolbarHost"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:orientation="vertical"
-        android:padding="20dp">
+        android:background="@color/mint_dark">
 
-        <TextView
+        <com.google.android.material.appbar.MaterialToolbar
+            android:id="@+id/toolbar"
             android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:text="@string/app_name"
-            android:textColor="@color/mint_dark"
-            android:textSize="28sp"
-            android:textStyle="bold" />
+            android:layout_height="?attr/actionBarSize"
+            android:background="@color/mint_dark"
+            app:title="@string/app_name"
+            app:titleTextColor="@color/card" />
+    </FrameLayout>
 
-        <TextView
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="4dp"
-            android:text="O computador e o celular precisam estar na mesma rede Wi-Fi."
-            android:textColor="@color/muted"
-            android:textSize="14sp" />
+    <FrameLayout
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_weight="1">
 
-        <com.google.android.material.textfield.TextInputLayout
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="16dp"
-            android:hint="Nome deste celular">
+        <!-- Início -->
+        <ScrollView
+            android:id="@+id/pageHome"
+            style="@style/CL.Page">
 
-            <com.google.android.material.textfield.TextInputEditText
-                android:id="@+id/phoneName"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:imeOptions="actionDone"
-                android:inputType="textCapWords"
-                android:maxLength="60" />
-        </com.google.android.material.textfield.TextInputLayout>
+            <LinearLayout style="@style/CL.PageContent">
 
-        <TextView
-            android:id="@+id/statusText"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="12dp"
-            android:textColor="@color/ink"
-            android:textSize="16sp" />
+                <LinearLayout
+                    android:id="@+id/updateBanner"
+                    style="@style/CL.Card"
+                    android:background="@drawable/update_bg"
+                    android:visibility="gone">
 
-        <TextView
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="20dp"
-            android:text="Computadores"
-            android:textColor="@color/ink"
-            android:textSize="18sp"
-            android:textStyle="bold" />
+                    <TextView
+                        android:id="@+id/updateTitle"
+                        style="@style/CL.CardTitle"
+                        android:textColor="@color/update_ink" />
 
-        <LinearLayout
-            android:id="@+id/deviceList"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="8dp"
-            android:orientation="vertical" />
+                    <TextView
+                        style="@style/CL.Hint"
+                        android:text="Atualize para receber as correções e novidades mais recentes."
+                        android:textColor="@color/update_ink" />
 
-        <TextView
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="4dp"
-            android:text="Se nenhum aparecer, use o IP mostrado na janela do computador."
-            android:textColor="@color/muted"
-            android:textSize="13sp" />
+                    <com.google.android.material.progressindicator.LinearProgressIndicator
+                        android:id="@+id/updateProgress"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="10dp"
+                        android:visibility="gone" />
 
-        <LinearLayout
-            android:id="@+id/pairBox"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="16dp"
-            android:background="@drawable/card_bg"
-            android:orientation="vertical"
-            android:padding="16dp"
-            android:visibility="gone">
+                    <LinearLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="8dp"
+                        android:gravity="end"
+                        android:orientation="horizontal">
 
-            <TextView
-                android:id="@+id/pairHint"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:textColor="@color/ink"
-                android:textSize="16sp" />
+                        <com.google.android.material.button.MaterialButton
+                            android:id="@+id/updateLater"
+                            style="@style/Widget.Material3.Button.TextButton"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="Depois"
+                            android:textColor="@color/update_ink" />
 
-            <com.google.android.material.textfield.TextInputLayout
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="8dp"
-                android:hint="Código de 6 dígitos">
+                        <com.google.android.material.button.MaterialButton
+                            android:id="@+id/updateNow"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:layout_marginStart="8dp"
+                            android:text="Atualizar" />
+                    </LinearLayout>
+                </LinearLayout>
 
-                <com.google.android.material.textfield.TextInputEditText
-                    android:id="@+id/pairCode"
+                <LinearLayout style="@style/CL.Card">
+
+                    <LinearLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:gravity="center_vertical"
+                        android:orientation="horizontal">
+
+                        <View
+                            android:id="@+id/statusDot"
+                            android:layout_width="12dp"
+                            android:layout_height="12dp"
+                            android:background="@drawable/status_dot" />
+
+                        <TextView
+                            android:id="@+id/sessionTitle"
+                            style="@style/CL.CardTitle"
+                            android:layout_width="0dp"
+                            android:layout_marginStart="10dp"
+                            android:layout_weight="1"
+                            android:textSize="20sp" />
+                    </LinearLayout>
+
+                    <TextView
+                        android:id="@+id/statusText"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="6dp"
+                        android:textColor="@color/ink"
+                        android:textSize="15sp" />
+
+                    <TextView
+                        android:id="@+id/sessionDetails"
+                        style="@style/CL.Hint"
+                        android:visibility="gone" />
+
+                    <TextView
+                        android:id="@+id/fileStatus"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="8dp"
+                        android:textColor="@color/mint_dark"
+                        android:textStyle="bold"
+                        android:visibility="gone" />
+                </LinearLayout>
+
+                <LinearLayout
+                    android:id="@+id/pairBox"
+                    style="@style/CL.Card"
+                    android:visibility="gone">
+
+                    <TextView
+                        style="@style/CL.CardTitle"
+                        android:text="Parear computador" />
+
+                    <TextView
+                        android:id="@+id/pairHint"
+                        style="@style/CL.Hint"
+                        android:textSize="14sp" />
+
+                    <com.google.android.material.textfield.TextInputLayout
+                        style="@style/Widget.Material3.TextInputLayout.OutlinedBox"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="12dp"
+                        android:hint="Código de 6 dígitos">
+
+                        <com.google.android.material.textfield.TextInputEditText
+                            android:id="@+id/pairCode"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:inputType="number"
+                            android:maxLength="6" />
+                    </com.google.android.material.textfield.TextInputLayout>
+
+                    <LinearLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="8dp"
+                        android:gravity="end"
+                        android:orientation="horizontal">
+
+                        <com.google.android.material.button.MaterialButton
+                            android:id="@+id/pairCancel"
+                            style="@style/Widget.Material3.Button.TextButton"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="Cancelar" />
+
+                        <com.google.android.material.button.MaterialButton
+                            android:id="@+id/pairConfirm"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:layout_marginStart="8dp"
+                            android:text="Parear" />
+                    </LinearLayout>
+                </LinearLayout>
+
+                <LinearLayout
+                    android:id="@+id/sessionBox"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:inputType="number"
-                    android:maxLength="6" />
-            </com.google.android.material.textfield.TextInputLayout>
+                    android:orientation="vertical"
+                    android:visibility="gone">
 
-            <LinearLayout
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="8dp"
-                android:orientation="horizontal">
+                    <TextView
+                        style="@style/CL.Section"
+                        android:text="Enviar para o computador" />
 
-                <com.google.android.material.button.MaterialButton
-                    android:id="@+id/pairConfirm"
-                    android:layout_width="0dp"
+                    <LinearLayout style="@style/CL.Card">
+
+                        <com.google.android.material.textfield.TextInputLayout
+                            style="@style/Widget.Material3.TextInputLayout.OutlinedBox"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:hint="Texto ou link">
+
+                            <com.google.android.material.textfield.TextInputEditText
+                                android:id="@+id/shareInput"
+                                android:layout_width="match_parent"
+                                android:layout_height="wrap_content"
+                                android:inputType="textMultiLine"
+                                android:minLines="2" />
+                        </com.google.android.material.textfield.TextInputLayout>
+
+                        <LinearLayout
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:layout_marginTop="8dp"
+                            android:orientation="horizontal">
+
+                            <com.google.android.material.button.MaterialButton
+                                android:id="@+id/sendText"
+                                android:layout_width="0dp"
+                                android:layout_height="wrap_content"
+                                android:layout_marginEnd="4dp"
+                                android:layout_weight="1"
+                                android:text="Enviar texto" />
+
+                            <com.google.android.material.button.MaterialButton
+                                android:id="@+id/sendUrl"
+                                style="@style/Widget.Material3.Button.TonalButton"
+                                android:layout_width="0dp"
+                                android:layout_height="wrap_content"
+                                android:layout_marginStart="4dp"
+                                android:layout_weight="1"
+                                android:text="Abrir link" />
+                        </LinearLayout>
+                    </LinearLayout>
+
+                    <LinearLayout style="@style/CL.Card"
+                        android:paddingTop="4dp"
+                        android:paddingBottom="4dp">
+
+                        <LinearLayout
+                            android:id="@+id/sendFile"
+                            style="@style/CL.Row">
+
+                            <LinearLayout style="@style/CL.RowText">
+
+                                <TextView
+                                    style="@style/CL.RowTitle"
+                                    android:text="Enviar arquivo" />
+
+                                <TextView
+                                    style="@style/CL.RowSubtitle"
+                                    android:text="Fotos, documentos e outros arquivos até 100 MB" />
+                            </LinearLayout>
+
+                            <ImageView style="@style/CL.Chevron" />
+                        </LinearLayout>
+
+                        <View style="@style/CL.Divider" />
+
+                        <LinearLayout
+                            android:id="@+id/sendClipboard"
+                            style="@style/CL.Row">
+
+                            <LinearLayout style="@style/CL.RowText">
+
+                                <TextView
+                                    style="@style/CL.RowTitle"
+                                    android:text="Enviar área de transferência" />
+
+                                <TextView
+                                    style="@style/CL.RowSubtitle"
+                                    android:text="Manda o que você copiou no celular" />
+                            </LinearLayout>
+
+                            <ImageView style="@style/CL.Chevron" />
+                        </LinearLayout>
+
+                        <View style="@style/CL.Divider" />
+
+                        <LinearLayout
+                            android:id="@+id/findPc"
+                            style="@style/CL.Row">
+
+                            <LinearLayout style="@style/CL.RowText">
+
+                                <TextView
+                                    style="@style/CL.RowTitle"
+                                    android:text="Chamar computador" />
+
+                                <TextView
+                                    style="@style/CL.RowSubtitle"
+                                    android:text="Toca um som no computador" />
+                            </LinearLayout>
+
+                            <ImageView style="@style/CL.Chevron" />
+                        </LinearLayout>
+                    </LinearLayout>
+                </LinearLayout>
+
+                <TextView
+                    style="@style/CL.Section"
+                    android:text="Computadores" />
+
+                <LinearLayout
+                    android:id="@+id/deviceList"
+                    android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:layout_weight="1"
-                    android:text="Parear" />
+                    android:layout_marginTop="12dp"
+                    android:orientation="vertical" />
+
+                <TextView
+                    android:id="@+id/deviceEmpty"
+                    style="@style/CL.Hint"
+                    android:layout_marginTop="8dp"
+                    android:layout_marginStart="4dp"
+                    android:text="Nenhum computador encontrado. Abra o Connect Linux no computador, com os dois na mesma rede Wi-Fi, ou use a aba Conectar." />
 
                 <com.google.android.material.button.MaterialButton
-                    android:id="@+id/pairCancel"
+                    android:id="@+id/forgetPc"
                     style="@style/Widget.Material3.Button.TextButton"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:text="Cancelar" />
-            </LinearLayout>
-        </LinearLayout>
+                    android:layout_gravity="end"
+                    android:layout_marginTop="4dp"
+                    android:text="Esquecer computador conectado"
+                    android:visibility="gone" />
 
-        <LinearLayout
-            android:id="@+id/sessionBox"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="16dp"
-            android:background="@drawable/card_bg"
-            android:orientation="vertical"
-            android:padding="16dp"
+                <TextView
+                    android:id="@+id/eventText"
+                    style="@style/CL.Hint"
+                    android:layout_marginTop="16dp"
+                    android:gravity="center_horizontal" />
+            </LinearLayout>
+        </ScrollView>
+
+        <!-- Conectar -->
+        <ScrollView
+            android:id="@+id/pageConnect"
+            style="@style/CL.Page"
             android:visibility="gone">
 
-            <TextView
-                android:id="@+id/sessionTitle"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:textColor="@color/mint_dark"
-                android:textSize="20sp"
-                android:textStyle="bold" />
+            <LinearLayout style="@style/CL.PageContent">
 
-            <TextView
-                android:id="@+id/sessionDetails"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="4dp"
-                android:textColor="@color/muted" />
+                <TextView
+                    style="@style/CL.Hint"
+                    android:layout_marginTop="16dp"
+                    android:layout_marginStart="4dp"
+                    android:text="Use estas opções quando o computador não aparecer sozinho na aba Início." />
 
-            <TextView
-                android:id="@+id/fileStatus"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="8dp"
-                android:textColor="@color/ink"
-                android:visibility="gone" />
+                <TextView
+                    style="@style/CL.Section"
+                    android:text="Pelo IP" />
 
-            <com.google.android.material.textfield.TextInputLayout
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="12dp"
-                android:hint="Texto ou link">
+                <LinearLayout style="@style/CL.Card">
 
-                <com.google.android.material.textfield.TextInputEditText
-                    android:id="@+id/shareInput"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:inputType="textMultiLine"
-                    android:minLines="2" />
-            </com.google.android.material.textfield.TextInputLayout>
+                    <TextView
+                        style="@style/CL.Hint"
+                        android:layout_marginTop="0dp"
+                        android:text="Digite o IP mostrado na janela do computador. Também funciona com o IP do Tailscale (começa com 100.)." />
 
-            <com.google.android.material.button.MaterialButton
-                android:id="@+id/sendText"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="8dp"
-                android:text="Enviar texto" />
+                    <LinearLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="12dp"
+                        android:orientation="horizontal">
 
-            <com.google.android.material.button.MaterialButton
-                android:id="@+id/sendUrl"
-                style="@style/Widget.Material3.Button.TonalButton"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:text="Abrir link no computador" />
+                        <com.google.android.material.textfield.TextInputLayout
+                            style="@style/Widget.Material3.TextInputLayout.OutlinedBox"
+                            android:layout_width="0dp"
+                            android:layout_height="wrap_content"
+                            android:layout_weight="1"
+                            android:hint="IP do computador">
 
-            <com.google.android.material.button.MaterialButton
-                android:id="@+id/sendFile"
-                style="@style/Widget.Material3.Button.TonalButton"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:text="Enviar arquivo" />
+                            <com.google.android.material.textfield.TextInputEditText
+                                android:id="@+id/manualHost"
+                                android:layout_width="match_parent"
+                                android:layout_height="wrap_content"
+                                android:inputType="text" />
+                        </com.google.android.material.textfield.TextInputLayout>
 
-            <com.google.android.material.button.MaterialButton
-                android:id="@+id/sendClipboard"
-                style="@style/Widget.Material3.Button.TonalButton"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:text="Enviar área de transferência" />
+                        <com.google.android.material.textfield.TextInputLayout
+                            style="@style/Widget.Material3.TextInputLayout.OutlinedBox"
+                            android:layout_width="100dp"
+                            android:layout_height="wrap_content"
+                            android:layout_marginStart="8dp"
+                            android:hint="Porta">
 
-            <com.google.android.material.button.MaterialButton
-                android:id="@+id/findPc"
-                style="@style/Widget.Material3.Button.TonalButton"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:text="Chamar computador" />
+                            <com.google.android.material.textfield.TextInputEditText
+                                android:id="@+id/manualPort"
+                                android:layout_width="match_parent"
+                                android:layout_height="wrap_content"
+                                android:inputType="number"
+                                android:text="17171" />
+                        </com.google.android.material.textfield.TextInputLayout>
+                    </LinearLayout>
 
-            <com.google.android.material.button.MaterialButton
-                android:id="@+id/forgetPc"
-                style="@style/Widget.Material3.Button.TextButton"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:text="Esquecer computador" />
+                    <com.google.android.material.button.MaterialButton
+                        android:id="@+id/manualConnect"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="8dp"
+                        android:text="Conectar" />
+                </LinearLayout>
 
-            <com.google.android.material.materialswitch.MaterialSwitch
-                android:id="@+id/clipSwitch"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="8dp"
-                android:text="Sincronizar área de transferência" />
+                <TextView
+                    style="@style/CL.Section"
+                    android:text="Sem Wi-Fi em comum" />
 
-            <com.google.android.material.materialswitch.MaterialSwitch
-                android:id="@+id/notifSwitch"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:text="Encaminhar notificações" />
-        </LinearLayout>
+                <LinearLayout style="@style/CL.Card">
 
-        <TextView
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="20dp"
-            android:text="Sem Wi-Fi em comum"
-            android:textColor="@color/ink"
-            android:textSize="18sp"
-            android:textStyle="bold" />
+                    <TextView
+                        style="@style/CL.CardTitle"
+                        android:text="Bluetooth" />
 
-        <TextView
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="4dp"
-            android:text="Bluetooth: pareie antes o celular com o computador nas configurações de Bluetooth. Cabo USB: ligue a depuração USB nas opções do desenvolvedor."
-            android:textColor="@color/muted"
-            android:textSize="13sp" />
+                    <TextView
+                        style="@style/CL.Hint"
+                        android:text="Pareie antes o celular com o computador nas configurações de Bluetooth do Android." />
 
-        <com.google.android.material.button.MaterialButton
-            android:id="@+id/bluetoothConnect"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="8dp"
-            android:text="Conectar por Bluetooth" />
+                    <com.google.android.material.button.MaterialButton
+                        android:id="@+id/bluetoothConnect"
+                        style="@style/Widget.Material3.Button.TonalButton"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="8dp"
+                        android:text="Conectar por Bluetooth" />
+                </LinearLayout>
 
-        <com.google.android.material.button.MaterialButton
-            android:id="@+id/usbConnect"
-            style="@style/Widget.Material3.Button.TonalButton"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:text="Conectar por cabo USB" />
+                <LinearLayout style="@style/CL.Card">
 
-        <TextView
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="20dp"
-            android:text="Conectar pelo IP"
-            android:textColor="@color/ink"
-            android:textSize="18sp"
-            android:textStyle="bold" />
+                    <TextView
+                        style="@style/CL.CardTitle"
+                        android:text="Cabo USB" />
 
-        <com.google.android.material.textfield.TextInputLayout
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="8dp"
-            android:hint="IP do computador (Wi-Fi ou Tailscale)">
+                    <TextView
+                        style="@style/CL.Hint"
+                        android:text="Ligue a depuração USB nas opções do desenvolvedor e espere o computador mostrar &quot;Cabo USB: pronto&quot;." />
 
-            <com.google.android.material.textfield.TextInputEditText
-                android:id="@+id/manualHost"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:inputType="text" />
-        </com.google.android.material.textfield.TextInputLayout>
+                    <com.google.android.material.button.MaterialButton
+                        android:id="@+id/usbConnect"
+                        style="@style/Widget.Material3.Button.TonalButton"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="8dp"
+                        android:text="Conectar por cabo USB" />
+                </LinearLayout>
+            </LinearLayout>
+        </ScrollView>
 
-        <com.google.android.material.textfield.TextInputLayout
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="8dp"
-            android:hint="Porta">
+        <!-- Ajustes -->
+        <ScrollView
+            android:id="@+id/pageSettings"
+            style="@style/CL.Page"
+            android:visibility="gone">
 
-            <com.google.android.material.textfield.TextInputEditText
-                android:id="@+id/manualPort"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:inputType="number"
-                android:text="17171" />
-        </com.google.android.material.textfield.TextInputLayout>
+            <LinearLayout style="@style/CL.PageContent">
 
-        <com.google.android.material.button.MaterialButton
-            android:id="@+id/manualConnect"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="8dp"
-            android:text="Conectar" />
+                <TextView
+                    style="@style/CL.Section"
+                    android:layout_marginTop="16dp"
+                    android:text="Este celular" />
 
-        <com.google.android.material.button.MaterialButton
-            android:id="@+id/openNotifSettings"
-            style="@style/Widget.Material3.Button.TonalButton"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="20dp"
-            android:text="Permitir acesso às notificações" />
+                <LinearLayout style="@style/CL.Card">
 
-        <com.google.android.material.button.MaterialButton
-            android:id="@+id/chooseNotifApps"
-            style="@style/Widget.Material3.Button.TonalButton"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:text="Apps que enviam notificações" />
+                    <com.google.android.material.textfield.TextInputLayout
+                        style="@style/Widget.Material3.TextInputLayout.OutlinedBox"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:hint="Nome que aparece no computador">
 
-        <com.google.android.material.button.MaterialButton
-            android:id="@+id/openBatterySettings"
-            style="@style/Widget.Material3.Button.TonalButton"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:text="Manter conexão em segundo plano" />
+                        <com.google.android.material.textfield.TextInputEditText
+                            android:id="@+id/phoneName"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:imeOptions="actionDone"
+                            android:inputType="textCapWords"
+                            android:maxLength="60" />
+                    </com.google.android.material.textfield.TextInputLayout>
+                </LinearLayout>
 
-        <com.google.android.material.button.MaterialButton
-            android:id="@+id/openOverlaySettings"
-            style="@style/Widget.Material3.Button.TonalButton"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:text="Abrir na tela as imagens do computador" />
+                <TextView
+                    style="@style/CL.Section"
+                    android:text="Sincronização" />
 
-        <TextView
-            android:id="@+id/eventText"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="16dp"
-            android:textColor="@color/muted"
-            android:textSize="14sp" />
-    </LinearLayout>
-</ScrollView>
+                <LinearLayout style="@style/CL.Card"
+                    android:paddingTop="4dp"
+                    android:paddingBottom="4dp">
+
+                    <com.google.android.material.materialswitch.MaterialSwitch
+                        android:id="@+id/clipSwitch"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:minHeight="56dp"
+                        android:text="Sincronizar área de transferência"
+                        android:textColor="@color/ink"
+                        android:textSize="16sp" />
+
+                    <View style="@style/CL.Divider" />
+
+                    <com.google.android.material.materialswitch.MaterialSwitch
+                        android:id="@+id/notifSwitch"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:minHeight="56dp"
+                        android:text="Encaminhar notificações"
+                        android:textColor="@color/ink"
+                        android:textSize="16sp" />
+
+                    <View style="@style/CL.Divider" />
+
+                    <LinearLayout
+                        android:id="@+id/chooseNotifApps"
+                        style="@style/CL.Row">
+
+                        <LinearLayout style="@style/CL.RowText">
+
+                            <TextView
+                                style="@style/CL.RowTitle"
+                                android:text="Apps que enviam notificações" />
+
+                            <TextView
+                                style="@style/CL.RowSubtitle"
+                                android:text="Escolha os mensageiros e redes sociais" />
+                        </LinearLayout>
+
+                        <ImageView style="@style/CL.Chevron" />
+                    </LinearLayout>
+                </LinearLayout>
+
+                <TextView
+                    style="@style/CL.Section"
+                    android:text="Permissões" />
+
+                <LinearLayout style="@style/CL.Card"
+                    android:paddingTop="4dp"
+                    android:paddingBottom="4dp">
+
+                    <LinearLayout
+                        android:id="@+id/openNotifSettings"
+                        style="@style/CL.Row">
+
+                        <LinearLayout style="@style/CL.RowText">
+
+                            <TextView
+                                style="@style/CL.RowTitle"
+                                android:text="Acesso às notificações" />
+
+                            <TextView
+                                android:id="@+id/notifAccessState"
+                                style="@style/CL.RowSubtitle" />
+                        </LinearLayout>
+
+                        <ImageView style="@style/CL.Chevron" />
+                    </LinearLayout>
+
+                    <View style="@style/CL.Divider" />
+
+                    <LinearLayout
+                        android:id="@+id/openBatterySettings"
+                        style="@style/CL.Row">
+
+                        <LinearLayout style="@style/CL.RowText">
+
+                            <TextView
+                                style="@style/CL.RowTitle"
+                                android:text="Manter conexão em segundo plano" />
+
+                            <TextView
+                                style="@style/CL.RowSubtitle"
+                                android:text="Retire a restrição de bateria do Connect Linux" />
+                        </LinearLayout>
+
+                        <ImageView style="@style/CL.Chevron" />
+                    </LinearLayout>
+
+                    <LinearLayout
+                        android:id="@+id/openOverlaySettings"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:orientation="vertical">
+
+                        <View style="@style/CL.Divider" />
+
+                        <LinearLayout
+                            android:id="@+id/openOverlayRow"
+                            style="@style/CL.Row">
+
+                            <LinearLayout style="@style/CL.RowText">
+
+                                <TextView
+                                    style="@style/CL.RowTitle"
+                                    android:text="Abrir imagens do computador na tela" />
+
+                                <TextView
+                                    style="@style/CL.RowSubtitle"
+                                    android:text="Permita sobrepor a outros apps" />
+                            </LinearLayout>
+
+                            <ImageView style="@style/CL.Chevron" />
+                        </LinearLayout>
+                    </LinearLayout>
+                </LinearLayout>
+
+                <TextView
+                    style="@style/CL.Section"
+                    android:text="Sobre" />
+
+                <LinearLayout style="@style/CL.Card"
+                    android:paddingTop="4dp"
+                    android:paddingBottom="4dp">
+
+                    <LinearLayout
+                        android:id="@+id/checkUpdate"
+                        style="@style/CL.Row">
+
+                        <LinearLayout style="@style/CL.RowText">
+
+                            <TextView
+                                android:id="@+id/appVersion"
+                                style="@style/CL.RowTitle" />
+
+                            <TextView
+                                android:id="@+id/updateStatus"
+                                style="@style/CL.RowSubtitle"
+                                android:text="Toque para procurar uma versão nova" />
+                        </LinearLayout>
+
+                        <ImageView style="@style/CL.Chevron" />
+                    </LinearLayout>
+                </LinearLayout>
+            </LinearLayout>
+        </ScrollView>
+    </FrameLayout>
+
+    <com.google.android.material.bottomnavigation.BottomNavigationView
+        android:id="@+id/bottomNav"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:background="@color/card"
+        app:menu="@menu/main_nav" />
+</LinearLayout>

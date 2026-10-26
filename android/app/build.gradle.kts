@@ -2,6 +2,14 @@ plugins {
     id("com.android.application")
 }
 
+// A versão do app acompanha a do programa do computador, que dá nome às releases.
+val projectVersion: String = Regex("__version__\\s*=\\s*\"([^\"]+)\"")
+    .find(rootDir.resolve("../desktop/connectlinux/__init__.py").readText())
+    ?.groupValues?.get(1)
+    ?: error("versão não encontrada em desktop/connectlinux/__init__.py")
+val projectVersionCode: Int = projectVersion.split('.').map { it.toInt() }
+    .let { (major, minor, patch) -> major * 10000 + minor * 100 + patch }
+
 android {
     namespace = "dev.connectlinux.app"
     compileSdk = 35
@@ -10,8 +18,8 @@ android {
         applicationId = "dev.connectlinux.app"
         minSdk = 26
         targetSdk = 35
-        versionCode = 4
-        versionName = "1.0.4"
+        versionCode = projectVersionCode
+        versionName = projectVersion
     }
 
     val storePath = providers.gradleProperty("CONNECTLINUX_STORE_FILE").orNull

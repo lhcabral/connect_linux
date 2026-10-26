@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<menu xmlns:android="http://schemas.android.com/apk/res/android">
+    <item
+        android:id="@+id/navHome"
+        android:icon="@drawable/ic_nav_home"
+        android:title="Início" />
+    <item
+        android:id="@+id/navConnect"
+        android:icon="@drawable/ic_nav_connect"
+        android:title="Conectar" />
+    <item
+        android:id="@+id/navSettings"
+        android:icon="@drawable/ic_nav_settings"
+        android:title="Ajustes" />
+</menu>

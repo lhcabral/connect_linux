@@ -16,6 +16,7 @@ class NotificationAppsActivity : AppCompatActivity() {
         super.onCreate(savedInstanceState)
         binding = ActivityNotificationAppsBinding.inflate(layoutInflater)
         setContentView(binding.root)
+        applySystemInsets(binding.root, binding.toolbarHost)
         store = DeviceStore(this)
         binding.toolbar.setNavigationOnClickListener { finish() }
         binding.openAccess.setOnClickListener {

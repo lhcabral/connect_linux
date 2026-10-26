@@ -9,6 +9,7 @@ import android.content.ComponentName
 import android.content.Intent
 import android.content.ServiceConnection
 import android.content.pm.PackageManager
+import android.content.res.ColorStateList
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
@@ -17,6 +18,7 @@ import android.provider.Settings
 import android.view.View
 import android.view.inputmethod.EditorInfo
 import android.widget.Toast
+import androidx.activity.OnBackPressedCallback
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.content.ContextCompat
@@ -31,6 +33,10 @@ class MainActivity : AppCompatActivity() {
     private var pendingText: String? = null
     private var pendingUri: Uri? = null
     private val listener: (UiState) -> Unit = { state -> render(state) }
+    private var availableUpdate: AppUpdate? = null
+    private var pendingUpdate: AppUpdate? = null
+    private var checkingUpdate = false
+    private var downloadingUpdate = false
 
     private val connection = object : ServiceConnection {
         override fun onServiceConnected(name: ComponentName?, binder: IBinder?) {
@@ -67,7 +73,10 @@ class MainActivity : AppCompatActivity() {
         super.onCreate(savedInstanceState)
         binding = ActivityMainBinding.inflate(layoutInflater)
         setContentView(binding.root)
+        applySystemInsets(binding.root, binding.toolbarHost)
+        bindNavigation(savedInstanceState?.getInt(KEY_TAB) ?: R.id.navHome)
         bindActions()
+        bindUpdates()
         handleShare(intent)
         if (Build.VERSION.SDK_INT >= 33 &&
             ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED
@@ -75,6 +84,144 @@ class MainActivity : AppCompatActivity() {
             requestNotifications.launch(Manifest.permission.POST_NOTIFICATIONS)
         }
         ContextCompat.startForegroundService(this, Intent(this, ConnectService::class.java))
+        if (savedInstanceState == null) checkForUpdate(manual = false)
+    }
+
+    override fun onSaveInstanceState(outState: Bundle) {
+        super.onSaveInstanceState(outState)
+        outState.putInt(KEY_TAB, binding.bottomNav.selectedItemId)
+    }
+
+    private fun bindNavigation(selected: Int) {
+        binding.bottomNav.setOnItemSelectedListener { item ->
+            showPage(item.itemId)
+            true
+        }
+        binding.bottomNav.selectedItemId = selected
+        showPage(selected)
+        onBackPressedDispatcher.addCallback(this, object : OnBackPressedCallback(true) {
+            override fun handleOnBackPressed() {
+                if (binding.bottomNav.selectedItemId != R.id.navHome) {
+                    binding.bottomNav.selectedItemId = R.id.navHome
+                } else {
+                    isEnabled = false
+                    onBackPressedDispatcher.onBackPressed()
+                    isEnabled = true
+                }
+            }
+        })
+    }
+
+    private fun showPage(itemId: Int) {
+        binding.pageHome.visibility = if (itemId == R.id.navHome) View.VISIBLE else View.GONE
+        binding.pageConnect.visibility = if (itemId == R.id.navConnect) View.VISIBLE else View.GONE
+        binding.pageSettings.visibility = if (itemId == R.id.navSettings) View.VISIBLE else View.GONE
+    }
+
+    private fun bindUpdates() {
+        binding.appVersion.text = "Versão ${AppUpdater.currentVersion(this)}"
+        binding.checkUpdate.setOnClickListener {
+            val update = availableUpdate
+            if (update != null) showUpdateDialog(update) else checkForUpdate(manual = true)
+        }
+        binding.updateNow.setOnClickListener { availableUpdate?.let { startUpdate(it) } }
+        binding.updateLater.setOnClickListener {
+            availableUpdate?.let { AppUpdater.dismiss(this, it.version) }
+            binding.updateBanner.visibility = View.GONE
+        }
+    }
+
+    private fun checkForUpdate(manual: Boolean) {
+        if (checkingUpdate) return
+        checkingUpdate = true
+        if (manual) binding.updateStatus.text = "Procurando versão nova…"
+        val context = applicationContext
+        Thread {
+            val result = runCatching { AppUpdater.check(context) }
+            runOnUiThread {
+                checkingUpdate = false
+                if (isDestroyed) return@runOnUiThread
+                result.onSuccess { update ->
+                    availableUpdate = update
+                    if (update == null) {
+                        binding.updateStatus.text = "Você está usando a versão mais nova"
+                        if (manual) Toast.makeText(this, "O app já está atualizado.", Toast.LENGTH_SHORT).show()
+                        return@onSuccess
+                    }
+                    binding.updateStatus.text = "Versão ${update.version} disponível. Toque para atualizar"
+                    binding.updateTitle.text = "Nova versão ${update.version} disponível"
+                    val dismissed = AppUpdater.wasDismissed(this, update.version)
+                    binding.updateBanner.visibility = if (dismissed && !manual) View.GONE else View.VISIBLE
+                    if (manual || !dismissed) showUpdateDialog(update)
+                }.onFailure {
+                    if (manual) {
+                        binding.updateStatus.text = "Não foi possível procurar agora. Verifique a internet"
+                    }
+                }
+            }
+        }.start()
+    }
+
+    private fun showUpdateDialog(update: AppUpdate) {
+        MaterialAlertDialogBuilder(this)
+            .setTitle("Atualização disponível")
+            .setMessage(
+                "A versão ${update.version} do Connect Linux está disponível. " +
+                    "Você está usando a ${AppUpdater.currentVersion(this)}.\n\nDeseja atualizar agora?",
+            )
+            .setPositiveButton("Atualizar") { _, _ -> startUpdate(update) }
+            .setNegativeButton("Depois") { _, _ -> AppUpdater.dismiss(this, update.version) }
+            .show()
+    }
+
+    private fun startUpdate(update: AppUpdate) {
+        if (downloadingUpdate) return
+        if (!packageManager.canRequestPackageInstalls()) {
+            pendingUpdate = update
+            MaterialAlertDialogBuilder(this)
+                .setTitle("Permitir a atualização")
+                .setMessage(
+                    "Para instalar a versão nova, o Android precisa que você permita que o Connect Linux " +
+                        "instale apps. Ative a opção na próxima tela e volte aqui.",
+                )
+                .setPositiveButton("Abrir configurações") { _, _ ->
+                    startActivity(Intent(Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES, Uri.parse("package:$packageName")))
+                }
+                .setNegativeButton("Cancelar") { _, _ -> pendingUpdate = null }
+                .show()
+            return
+        }
+        downloadingUpdate = true
+        binding.updateBanner.visibility = View.VISIBLE
+        binding.updateNow.isEnabled = false
+        binding.updateProgress.isIndeterminate = true
+        binding.updateProgress.visibility = View.VISIBLE
+        binding.updateStatus.text = "Baixando a versão ${update.version}…"
+        val context = applicationContext
+        Thread {
+            val result = runCatching {
+                AppUpdater.download(context, update) { percent ->
+                    runOnUiThread {
+                        binding.updateProgress.isIndeterminate = false
+                        binding.updateProgress.setProgressCompat(percent, true)
+                        binding.updateStatus.text = "Baixando a versão ${update.version}… $percent%"
+                    }
+                }
+            }
+            runOnUiThread {
+                downloadingUpdate = false
+                if (isDestroyed) return@runOnUiThread
+                binding.updateNow.isEnabled = true
+                binding.updateProgress.visibility = View.GONE
+                result.onSuccess { apk ->
+                    binding.updateStatus.text = "Versão ${update.version} baixada. Toque para instalar"
+                    startActivity(AppUpdater.installIntent(this, apk))
+                }.onFailure { error ->
+                    binding.updateStatus.text = "Falha ao baixar. Toque para tentar de novo"
+                    Toast.makeText(this, "Não deu para baixar a atualização: ${error.message}", Toast.LENGTH_LONG).show()
+                }
+            }
+        }.start()
     }
 
     override fun onStart() {
@@ -166,7 +313,7 @@ class MainActivity : AppCompatActivity() {
         binding.openBatterySettings.setOnClickListener {
             startActivity(Intent(Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS))
         }
-        binding.openOverlaySettings.setOnClickListener {
+        binding.openOverlayRow.setOnClickListener {
             Toast.makeText(this, "Ative \"Sobrepor a outros apps\" para o Connect Linux.", Toast.LENGTH_LONG).show()
             startActivity(Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION, Uri.parse("package:$packageName")))
         }
@@ -175,10 +322,31 @@ class MainActivity : AppCompatActivity() {
     override fun onResume() {
         super.onResume()
         binding.openOverlaySettings.visibility = if (Settings.canDrawOverlays(this)) View.GONE else View.VISIBLE
+        binding.notifAccessState.text = if (notificationAccessEnabled()) {
+            "Permitido"
+        } else {
+            "Não permitido: toque para permitir"
+        }
+        val update = pendingUpdate
+        if (update != null && packageManager.canRequestPackageInstalls()) {
+            pendingUpdate = null
+            startUpdate(update)
+        }
     }
 
     private fun render(state: UiState) {
+        val connected = state.connectedId != null
         binding.statusText.text = state.status
+        binding.statusDot.backgroundTintList = ColorStateList.valueOf(
+            ContextCompat.getColor(this, if (connected) R.color.mint else R.color.offline),
+        )
+        binding.sessionTitle.text = if (connected) {
+            state.connectedName.ifBlank { "Computador" }
+        } else {
+            "Desconectado"
+        }
+        binding.sessionDetails.visibility = if (connected) View.VISIBLE else View.GONE
+        binding.forgetPc.visibility = if (connected) View.VISIBLE else View.GONE
         if (!binding.phoneName.hasFocus() && binding.phoneName.text?.toString() != state.phoneName) {
             binding.phoneName.setText(state.phoneName)
         }
@@ -189,14 +357,14 @@ class MainActivity : AppCompatActivity() {
         } else {
             "Digite o código que apareceu no computador ${state.pairingName}."
         }
-        binding.sessionBox.visibility = if (state.connectedId != null) View.VISIBLE else View.GONE
-        binding.sessionTitle.text = state.connectedName.ifBlank { "Computador" }
+        binding.sessionBox.visibility = if (connected) View.VISIBLE else View.GONE
         val latency = state.latencyMs?.let { "$it ms" } ?: "medindo…"
         val battery = state.desktopBattery.ifBlank { "bateria do computador indisponível" }
         binding.sessionDetails.text = "$latency · $battery"
         binding.fileStatus.text = state.fileStatus
         binding.fileStatus.visibility = if (state.fileStatus.isBlank()) View.GONE else View.VISIBLE
         binding.eventText.text = state.lastEvent
+        binding.eventText.visibility = if (state.lastEvent.isBlank()) View.GONE else View.VISIBLE
         binding.clipSwitch.setOnCheckedChangeListener(null)
         binding.clipSwitch.isChecked = state.clipboardSync
         binding.clipSwitch.setOnCheckedChangeListener { _, checked -> service?.setClipboardSync(checked) }
@@ -217,6 +385,7 @@ class MainActivity : AppCompatActivity() {
         if (signature == deviceSignature) return
         deviceSignature = signature
         binding.deviceList.removeAllViews()
+        binding.deviceEmpty.visibility = if (devices.isEmpty()) View.VISIBLE else View.GONE
         if (devices.isEmpty()) {
             return
         }
@@ -321,5 +490,9 @@ class MainActivity : AppCompatActivity() {
     private fun notificationAccessEnabled(): Boolean {
         val enabled = Settings.Secure.getString(contentResolver, "enabled_notification_listeners") ?: return false
         return enabled.split(":").any { it.contains(packageName) }
+    }
+
+    private companion object {
+        const val KEY_TAB = "tab"
     }
 }

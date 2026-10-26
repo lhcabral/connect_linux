@@ -6,15 +6,22 @@
     android:background="@color/bg"
     android:orientation="vertical">
 
-    <com.google.android.material.appbar.MaterialToolbar
-        android:id="@+id/toolbar"
+    <FrameLayout
+        android:id="@+id/toolbarHost"
         android:layout_width="match_parent"
-        android:layout_height="?attr/actionBarSize"
-        android:background="@color/mint_dark"
-        app:navigationIcon="?attr/homeAsUpIndicator"
-        app:navigationIconTint="@color/card"
-        app:title="Apps que enviam notificações"
-        app:titleTextColor="@color/card" />
+        android:layout_height="wrap_content"
+        android:background="@color/mint_dark">
+
+        <com.google.android.material.appbar.MaterialToolbar
+            android:id="@+id/toolbar"
+            android:layout_width="match_parent"
+            android:layout_height="?attr/actionBarSize"
+            android:background="@color/mint_dark"
+            app:navigationIcon="?attr/homeAsUpIndicator"
+            app:navigationIconTint="@color/card"
+            app:title="Apps que enviam notificações"
+            app:titleTextColor="@color/card" />
+    </FrameLayout>
 
     <ScrollView
         android:layout_width="match_parent"

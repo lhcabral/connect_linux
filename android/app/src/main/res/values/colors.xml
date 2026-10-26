@@ -7,4 +7,8 @@
     <color name="card">#FFFFFF</color>
     <color name="ink">#1C2416</color>
     <color name="muted">#5E6B58</color>
+    <color name="line">#E2E8DE</color>
+    <color name="offline">#A9B3A4</color>
+    <color name="update_bg">#FFF4D6</color>
+    <color name="update_ink">#6A4B00</color>
 </resources>

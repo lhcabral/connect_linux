@@ -45,7 +45,11 @@ Para desinstalar: `sudo apt remove connectlinux`.
 
 Com o celular no cabo USB e a depuração ligada, também dá para instalar pelo computador: `adb install ConnectLinux.apk`.
 
-Para encaminhar as notificações dos outros aplicativos, toque em **Permitir acesso às notificações** e ative o Connect Linux. Em **Manter conexão em segundo plano**, retire a restrição de bateria do aplicativo, senão o Android pode derrubar a conexão.
+O aplicativo tem três abas: **Início** (status, computadores e envio), **Conectar** (IP, Bluetooth e cabo USB) e **Ajustes**.
+
+Para encaminhar as notificações, vá em **Ajustes**, toque em **Acesso às notificações** e ative o Connect Linux. Em **Apps que enviam notificações**, escolha quais mensageiros e redes sociais instalados no celular mandam notificações para o computador. Em **Manter conexão em segundo plano**, retire a restrição de bateria do aplicativo, senão o Android pode derrubar a conexão.
+
+Quando sai uma versão nova, o aplicativo avisa ao abrir e oferece **Atualizar**. Ele baixa o APK da página de releases, confere a soma SHA-256 e abre o instalador do Android. Na primeira vez, o Android pede para permitir que o Connect Linux instale apps. Para procurar na hora, toque na versão em **Ajustes > Sobre**.
 
 ## Como parear
 
@@ -151,6 +155,8 @@ cd android
 ```
 
 O projeto usa o plugin Android 9.4 e o Gradle 9.8, e compila com o Java que vem no Android Studio.
+
+A versão do APK vem de `__version__` em `desktop/connectlinux/__init__.py`, a mesma que dá nome à release. O aviso de atualização compara essa versão com a tag da última release, então o APK publicado precisa ser compilado com a versão da tag.
 
 O APK de lançamento é assinado com a chave definida em `~/.gradle/gradle.properties`:
 
