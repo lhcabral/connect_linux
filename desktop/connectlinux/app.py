@@ -14,8 +14,9 @@ from . import context_menu
 from .bluetooth_link import BluetoothLink
 from .control import ControlServer
 from .link_server import LinkServer
+from .mirror import Mirror
 from .store import Store
-from .system_bridge import local_ipv4s, open_path
+from .system_bridge import local_ipv4s, notify, open_path
 from .usb_link import UsbLink
 
 log = logging.getLogger("connectlinux")
@@ -42,6 +43,7 @@ class App:
         self.enable_extras = enable_extras
         self.bluetooth = BluetoothLink(self._adopt_bluetooth)
         self.usb = UsbLink()
+        self.mirror = Mirror(self.usb.adb, self._mirror_message)
         self._bt_status: dict = {}
         self._loop: asyncio.AbstractEventLoop | None = None
         self._thread: threading.Thread | None = None
@@ -184,7 +186,24 @@ class App:
             with contextlib.suppress(Exception):
                 self._loop.close()
 
+    def mirror_screen(self, device_id: str = "") -> None:
+        """Abre a tela do celular numa janela, preferindo o selecionado ou o conectado."""
+        rows = self.snapshot()
+        row = next((item for item in rows if item["id"] == device_id), None)
+        if row is None:
+            row = next((item for item in rows if item["online"]), None)
+        name = row["name"] if row else "o celular"
+        host = row.get("host") if row else None
+        if host and (host.startswith("127.") or host == "::1"):
+            host = None
+        self.mirror.start(name or "Celular", host)
+
+    def _mirror_message(self, text: str) -> None:
+        self._log(text)
+        notify("Espelhar tela", text)
+
     def stop(self) -> None:
+        self.mirror.stop_all()
         if self.control is not None:
             self.control.stop()
             self.control = None

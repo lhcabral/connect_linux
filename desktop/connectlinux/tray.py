@@ -23,9 +23,10 @@ XAPP_WAIT_MS = 1200
 class TrayIcon:
     """Fica visível o tempo todo. O botão direito abre o menu."""
 
-    def __init__(self, on_present, on_connect, on_minimize, on_maximize, on_quit, on_ready) -> None:
+    def __init__(self, on_present, on_connect, on_mirror, on_minimize, on_maximize, on_quit, on_ready) -> None:
         self._on_present = on_present
         self._on_connect = on_connect
+        self._on_mirror = on_mirror
         self._on_minimize = on_minimize
         self._on_maximize = on_maximize
         self._on_quit = on_quit
@@ -88,6 +89,7 @@ class TrayIcon:
         entries = (
             ("Abrir o Connect Linux", self._on_present),
             ("Conectar", self._on_connect),
+            ("Espelhar tela", self._on_mirror),
             ("Minimizar", self._on_minimize),
             ("Maximizar", self._on_maximize),
         )

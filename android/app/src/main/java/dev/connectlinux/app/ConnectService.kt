@@ -66,6 +66,7 @@ class ConnectService : Service() {
     override fun onCreate() {
         super.onCreate()
         instance = this
+        NotificationRelayService.rebind(this)
         createChannels()
         startAsForeground("Procurando computador")
         ui = UiState(
