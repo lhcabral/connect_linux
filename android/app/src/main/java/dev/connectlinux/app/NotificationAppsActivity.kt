@@ -13,6 +13,7 @@ class NotificationAppsActivity : AppCompatActivity() {
     private lateinit var store: DeviceStore
 
     override fun onCreate(savedInstanceState: Bundle?) {
+        drawBehindSystemBars()
         super.onCreate(savedInstanceState)
         binding = ActivityNotificationAppsBinding.inflate(layoutInflater)
         setContentView(binding.root)

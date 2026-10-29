@@ -22,6 +22,8 @@ import androidx.activity.OnBackPressedCallback
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.content.ContextCompat
+import androidx.core.view.WindowCompat
+import androidx.core.view.WindowInsetsCompat
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import dev.connectlinux.app.databinding.ActivityMainBinding
 import dev.connectlinux.app.databinding.ItemDeviceBinding
@@ -37,6 +39,7 @@ class MainActivity : AppCompatActivity() {
     private var pendingUpdate: AppUpdate? = null
     private var checkingUpdate = false
     private var downloadingUpdate = false
+    private var shown: Shown? = null
 
     private val connection = object : ServiceConnection {
         override fun onServiceConnected(name: ComponentName?, binder: IBinder?) {
@@ -70,10 +73,11 @@ class MainActivity : AppCompatActivity() {
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
+        drawBehindSystemBars()
         super.onCreate(savedInstanceState)
         binding = ActivityMainBinding.inflate(layoutInflater)
         setContentView(binding.root)
-        applySystemInsets(binding.root, binding.toolbarHost)
+        applySystemInsets(binding.root, binding.toolbarHost, binding.bottomNav)
         bindNavigation(savedInstanceState?.getInt(KEY_TAB) ?: R.id.navHome)
         bindActions()
         bindUpdates()
@@ -110,6 +114,12 @@ class MainActivity : AppCompatActivity() {
                 }
             }
         })
+    }
+
+    private fun submitPairCode() {
+        service?.submitCode(binding.pairCode.text?.toString().orEmpty())
+        binding.pairCode.clearFocus()
+        WindowCompat.getInsetsController(window, binding.pairCode).hide(WindowInsetsCompat.Type.ime())
     }
 
     private fun showPage(itemId: Int) {
@@ -258,8 +268,14 @@ class MainActivity : AppCompatActivity() {
                 false
             }
         }
-        binding.pairConfirm.setOnClickListener {
-            service?.submitCode(binding.pairCode.text?.toString().orEmpty())
+        binding.pairConfirm.setOnClickListener { submitPairCode() }
+        binding.pairCode.setOnEditorActionListener { _, actionId, _ ->
+            if (actionId == EditorInfo.IME_ACTION_DONE) {
+                submitPairCode()
+                true
+            } else {
+                false
+            }
         }
         binding.pairCancel.setOnClickListener { service?.disconnect() }
         binding.sendText.setOnClickListener {
@@ -357,6 +373,11 @@ class MainActivity : AppCompatActivity() {
             binding.phoneName.setText(state.phoneName)
         }
         val pairing = state.pairing && state.connectedId == null
+        val before = shown
+        if (before != null && ((pairing && !before.pairing) || (connected && !before.connected))) {
+            binding.bottomNav.selectedItemId = R.id.navHome
+        }
+        shown = Shown(pairing, connected)
         binding.pairBox.visibility = if (pairing) View.VISIBLE else View.GONE
         binding.pairHint.text = if (state.pairError.isNotBlank()) {
             state.pairError
@@ -548,6 +569,8 @@ class MainActivity : AppCompatActivity() {
         val enabled = Settings.Secure.getString(contentResolver, "enabled_notification_listeners") ?: return false
         return enabled.split(":").any { it.contains(packageName) }
     }
+
+    private data class Shown(val pairing: Boolean, val connected: Boolean)
 
     private companion object {
         const val KEY_TAB = "tab"
