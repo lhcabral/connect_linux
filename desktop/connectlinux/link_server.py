@@ -24,6 +24,7 @@ from .protocol import (
     LINK_PORT,
     MAX_CHUNK_RAW,
     MAX_CLIPBOARD,
+    MAX_DELETE,
     MAX_FILE_BYTES,
     MAX_PHOTO_PAGE,
     MAX_THUMB_B64,
@@ -215,7 +216,16 @@ class LinkServer:
                 await session.send({"type": "unpair"})
             session.writer.close()
 
-    async def send_file(self, device_id: str, path: Path, open_after: bool = False) -> None:
+    async def delete_photos(self, device_id: str, ids: list[str]) -> None:
+        session = self.sessions.get(device_id)
+        if session is None:
+            raise ConnectionError("celular desconectado")
+        clean = [int(item) for item in ids if str(item).isdigit() and len(str(item)) <= 20][:MAX_DELETE]
+        if not clean:
+            raise ValueError("nenhuma foto selecionada")
+        await session.send({"type": "photos_delete", "ids": clean})
+
+    async def send_file(self, device_id: str, path: Path, open_after: bool = False, dest: str = "") -> bool:
         session = self.sessions.get(device_id)
         if session is None:
             raise ConnectionError("celular desconectado")
@@ -244,16 +254,17 @@ class LinkServer:
                         "mime": mime,
                         "sha256": digest,
                         "open": bool(open_after),
+                        **({"dest": dest} if dest else {}),
                     }
                 )
                 try:
                     accepted = await asyncio.wait_for(accept, 120)
                 except asyncio.TimeoutError:
                     self._log(f"O celular não aceitou {path.name}.")
-                    return
+                    return False
                 if not accepted:
                     self._log(f"O celular recusou {path.name}.")
-                    return
+                    return False
                 self._log(f"Enviando {path.name}…")
                 sent = 0
                 sequence = 0
@@ -285,11 +296,12 @@ class LinkServer:
                     result = await asyncio.wait_for(done, 120)
                 except asyncio.TimeoutError:
                     self._log(f"Sem confirmação do celular para {path.name}.")
-                    return
+                    return False
                 if result:
                     self._log(f"Arquivo enviado: {path.name}")
                 else:
                     self._log(f"O celular não concluiu {path.name}.")
+                return bool(result)
             finally:
                 self._pending_accept.pop(file_id, None)
                 self._pending_done.pop(file_id, None)
@@ -591,6 +603,9 @@ class LinkServer:
         if kind == "photos":
             self._on_photos(session, message)
             return
+        if kind == "photos_deleted":
+            self._on_photos_deleted(session, message)
+            return
         if kind == "battery":
             level = message.get("level")
             if isinstance(level, int) and 0 <= level <= 100:
@@ -715,6 +730,25 @@ class LinkServer:
                     "error": str(message.get("error", ""))[:40],
                     "items": items,
                 },
+            )
+
+    def _on_photos_deleted(self, session: Session, message: dict) -> None:
+        raw_ids = message.get("ids")
+        ids = [
+            str(item)
+            for item in (raw_ids[:MAX_DELETE] if isinstance(raw_ids, list) else [])
+            if isinstance(item, int) and not isinstance(item, bool) and item >= 0
+        ]
+        ok = bool(message.get("ok"))
+        text = " ".join(str(message.get("message", "")).split())[:200]
+        if ok and ids:
+            self._log(f"{session.name} excluiu {len(ids)} foto(s).")
+        elif text:
+            self._log(f"Exclusão de fotos: {text}")
+        if self.on_event:
+            self.on_event(
+                "photos_deleted",
+                {"device_id": session.device_id, "ids": ids, "ok": ok, "message": text},
             )
 
     async def _on_file_meta(self, session: Session, message: dict) -> None:

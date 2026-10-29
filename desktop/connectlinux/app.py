@@ -304,6 +304,25 @@ class App:
         self._log(f"Trazendo {photo['name']} do celular…")
         self._spawn(self.server.request_photo(device_id, photo["id"]))
 
+    def delete_photos(self, device_id: str, ids: list[str]) -> None:
+        self._spawn(self.server.delete_photos(device_id, ids))
+
+    def upload_photos(self, device_id: str, paths: list[Path]) -> None:
+        """Envia fotos para a galeria do celular, uma de cada vez."""
+        self._spawn(self._upload_photos(device_id, paths))
+
+    async def _upload_photos(self, device_id: str, paths: list[Path]) -> None:
+        sent = 0
+        try:
+            for path in paths:
+                try:
+                    if await self.server.send_file(device_id, path, dest="photos"):
+                        sent += 1
+                except (OSError, ValueError) as exc:
+                    self._log(f"Não foi possível enviar {path.name}: {exc}")
+        finally:
+            self.events.put(("photos_changed", {"device_id": device_id, "sent": sent, "total": len(paths)}))
+
     def find_device(self, device_id: str) -> None:
         self._spawn(self.server.find_device(device_id))
 

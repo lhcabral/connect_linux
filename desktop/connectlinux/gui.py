@@ -23,7 +23,7 @@ from gi.repository import Gdk, GdkPixbuf, Gtk, Pango  # noqa: E402
 
 from . import __version__, autostart, pix, updater  # noqa: E402
 from .app import App  # noqa: E402
-from .system_bridge import notify  # noqa: E402
+from .system_bridge import is_image_name, notify  # noqa: E402
 from .tray import TrayIcon, icon_path  # noqa: E402
 
 UPDATE_CHECK_MS = 6 * 60 * 60 * 1000
@@ -53,6 +53,9 @@ CSS = b"""
 .cl-seen, .cl-card row:selected label.cl-seen { color: #E5A50A; }
 .cl-offline { opacity: 0.35; }
 .cl-qr { background-color: #FFFFFF; border-radius: 8px; }
+.cl-photo-check { background-color: alpha(#FFFFFF, 0.85); border-radius: 6px; padding: 2px; }
+.cl-photo-picked { opacity: 0.6; }
+.cl-drop { border: 2px dashed @theme_selected_bg_color; border-radius: 10px; }
 """
 
 
@@ -345,10 +348,30 @@ class DesktopWindow:
         folder = _icon_button("folder-pictures-symbolic", "Pasta de recebidos")
         folder.connect("clicked", lambda _b: self._open_folder())
         top.pack_end(folder, False, False, 0)
+        upload = _icon_button("list-add-symbolic", "Enviar fotos")
+        upload.set_tooltip_text("Coloca fotos do computador na galeria do celular. Você também pode arrastá-las para cá.")
+        upload.connect("clicked", lambda _b: self._choose_upload())
+        top.pack_end(upload, False, False, 0)
         page.pack_start(top, False, False, 0)
 
         self.photos_hint = _label("", "cl-dim", wrap=True)
         page.pack_start(self.photos_hint, False, False, 0)
+
+        self.photos_bar = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8)
+        self.photos_bar.set_no_show_all(True)
+        self.photos_picked = _label("", "cl-strong")
+        self.photos_bar.pack_start(self.photos_picked, False, False, 0)
+        remove = _icon_button("user-trash-symbolic", "Excluir do celular")
+        remove.get_style_context().add_class("destructive-action")
+        remove.connect("clicked", lambda _b: self._delete_photos())
+        self.photos_bar.pack_end(remove, False, False, 0)
+        clear = Gtk.Button(label="Limpar seleção")
+        clear.connect("clicked", lambda _b: self._clear_photo_selection())
+        self.photos_bar.pack_end(clear, False, False, 0)
+        self.photos_picked.show()
+        remove.show_all()
+        clear.show()
+        page.pack_start(self.photos_bar, False, False, 0)
 
         self.photo_grid = Gtk.FlowBox()
         self.photo_grid.set_valign(Gtk.Align.START)
@@ -366,7 +389,14 @@ class DesktopWindow:
         self.photos_more.set_no_show_all(True)
         self.photos_more.connect("clicked", lambda _b: self._load_photos(reset=False))
         page.pack_start(self.photos_more, False, False, 0)
-        return _scrolled(page)
+        scrolled = _scrolled(page)
+        scrolled.drag_dest_set(
+            Gtk.DestDefaults.ALL, [Gtk.TargetEntry.new("text/uri-list", 0, 0)], Gdk.DragAction.COPY
+        )
+        scrolled.connect("drag-data-received", self._photos_dropped)
+        scrolled.connect("drag-motion", lambda widget, *_a: widget.get_style_context().add_class("cl-drop"))
+        scrolled.connect("drag-leave", lambda widget, *_a: widget.get_style_context().remove_class("cl-drop"))
+        return scrolled
 
     def _build_activity_page(self) -> Gtk.Widget:
         page = _page()
@@ -412,6 +442,10 @@ class DesktopWindow:
                 self._render_pair()
             elif kind == "photos":
                 self._show_photos(payload)
+            elif kind == "photos_deleted":
+                self._photos_deleted(payload)
+            elif kind == "photos_changed":
+                self._photos_changed(payload)
         self._rows = self.app.snapshot()
         self._photos_page_shown()
         self._render_phones()
@@ -566,6 +600,7 @@ class DesktopWindow:
             self._photos_count = 0
             self._photos_next = 0
             self.photos_more.hide()
+            self._photo_selection_changed()
         self._photos_device = phone["id"]
         _set_text(self.photos_title, f"Fotos recentes de {phone['name']}")
         _set_text(self.photos_hint, "Buscando as fotos no celular…")
@@ -608,6 +643,7 @@ class DesktopWindow:
             tile = _photo_tile(photo)
             if tile is None:
                 continue
+            tile.check.connect("toggled", lambda _c: self._photo_selection_changed())
             self.photo_grid.add(tile)
             tile.show_all()
             self._photos_count += 1
@@ -618,14 +654,126 @@ class DesktopWindow:
         _set_text(self.photos_hint, _photos_hint(payload, self._photos_count, folder))
 
     def _open_photo(self, child: Gtk.FlowBoxChild) -> None:
-        photo = getattr(child.get_child(), "photo", None)
+        tile = child.get_child()
+        photo = getattr(tile, "photo", None)
         if photo is None or self._photos_device is None:
+            return
+        if self._picked_tiles():
+            tile.check.set_active(not tile.check.get_active())
             return
         if not any(row["id"] == self._photos_device and row.get("online") for row in self._rows):
             self._message("O celular desconectou. Conecte de novo para abrir a foto.")
             return
         self.app.open_phone_photo(self._photos_device, photo)
         _set_text(self.photos_hint, f"Abrindo {photo['name']}…")
+
+    def _picked_tiles(self) -> list[Gtk.Widget]:
+        tiles = (child.get_child() for child in self.photo_grid.get_children())
+        return [tile for tile in tiles if tile.check.get_active()]
+
+    def _photo_selection_changed(self) -> None:
+        picked = self._picked_tiles()
+        for child in self.photo_grid.get_children():
+            tile = child.get_child()
+            context = tile.image.get_style_context()
+            if tile.check.get_active():
+                context.add_class("cl-photo-picked")
+            else:
+                context.remove_class("cl-photo-picked")
+        if picked:
+            _set_text(self.photos_picked, "1 foto selecionada" if len(picked) == 1 else f"{len(picked)} fotos selecionadas")
+            self.photos_bar.show()
+        else:
+            self.photos_bar.hide()
+
+    def _clear_photo_selection(self) -> None:
+        for tile in self._picked_tiles():
+            tile.check.set_active(False)
+
+    def _photos_online(self) -> bool:
+        if self._photos_device and any(row["id"] == self._photos_device and row.get("online") for row in self._rows):
+            return True
+        self._message("Conecte o celular para mexer nas fotos dele.")
+        return False
+
+    def _delete_photos(self) -> None:
+        picked = self._picked_tiles()
+        if not picked or not self._photos_online():
+            return
+        count = "esta foto" if len(picked) == 1 else f"estas {len(picked)} fotos"
+        if not self._confirm(
+            f"Excluir {count} do celular?",
+            "Elas serão apagadas da galeria do celular. O celular vai pedir para você confirmar na tela dele.",
+            "Excluir",
+            destructive=True,
+        ):
+            return
+        self.app.delete_photos(self._photos_device, [tile.photo["id"] for tile in picked])
+        _set_text(self.photos_hint, "Confirme a exclusão na tela do celular. Se não aparecer nada, toque no aviso do Connect Linux.")
+
+    def _photos_deleted(self, payload: dict) -> None:
+        if payload.get("device_id") != self._photos_device:
+            return
+        gone = set(payload.get("ids", []))
+        for child in self.photo_grid.get_children():
+            if child.get_child().photo["id"] in gone:
+                self.photo_grid.remove(child)
+                self._photos_count -= 1
+                self._photos_next = max(0, self._photos_next - 1)
+        self._photo_selection_changed()
+        if payload.get("ok") and gone:
+            _set_text(self.photos_hint, "1 foto excluída do celular." if len(gone) == 1 else f"{len(gone)} fotos excluídas do celular.")
+        else:
+            _set_text(self.photos_hint, payload.get("message") or "Nenhuma foto foi excluída.")
+
+    def _choose_upload(self) -> None:
+        if not self._photos_online():
+            return
+        dialog = Gtk.FileChooserNative.new(
+            "Enviar fotos para o celular", self.window, Gtk.FileChooserAction.OPEN, "Enviar", "Cancelar"
+        )
+        dialog.set_select_multiple(True)
+        images = Gtk.FileFilter()
+        images.set_name("Imagens")
+        images.add_mime_type("image/*")
+        dialog.add_filter(images)
+        if dialog.run() == Gtk.ResponseType.ACCEPT:
+            self._upload_photos([Path(name) for name in dialog.get_filenames()])
+        dialog.destroy()
+
+    def _photos_dropped(self, widget, context, _x, _y, data, _info, time) -> None:
+        widget.get_style_context().remove_class("cl-drop")
+        paths = []
+        for uri in data.get_uris() or []:
+            try:
+                paths.append(Path(GLib.filename_from_uri(uri)[0]))
+            except GLib.Error:
+                continue
+        Gtk.drag_finish(context, bool(paths), False, time)
+        if paths and self._photos_online():
+            self._upload_photos(paths)
+
+    def _upload_photos(self, paths: list[Path]) -> None:
+        images = [path for path in paths if path.is_file() and is_image_name(path.name)]
+        if not images:
+            self._message("Escolha arquivos de imagem, como JPG, PNG ou WEBP.")
+            return
+        self.app.upload_photos(self._photos_device, images)
+        count = "1 foto" if len(images) == 1 else f"{len(images)} fotos"
+        _set_text(self.photos_hint, f"Enviando {count} para o celular… Elas vão para a pasta Connect Linux da galeria.")
+        self.photos_spinner.start()
+
+    def _photos_changed(self, payload: dict) -> None:
+        if payload.get("device_id") != self._photos_device:
+            return
+        self.photos_spinner.stop()
+        sent, total = payload.get("sent", 0), payload.get("total", 0)
+        if not sent:
+            _set_text(self.photos_hint, "O celular não recebeu as fotos. Veja os detalhes em Atividade.")
+            return
+        self._load_photos(reset=True)
+        if sent < total:
+            self._append_log(f"{sent} de {total} fotos foram para o celular.")
 
     def _selected(self) -> dict | None:
         selected = self.phone_list.get_selected_row()
@@ -1196,7 +1344,10 @@ PHOTO_TILE = 150
 def _photos_hint(payload: dict, shown: int, folder: str) -> str:
     partial = payload.get("partial")
     if shown:
-        text = "Clique numa foto para abri-la aqui. Ela fica salva na pasta de recebidos."
+        text = (
+            "Clique numa foto para abri-la aqui; ela fica salva na pasta de recebidos. Marque o quadradinho "
+            "para selecionar e excluir. Arraste fotos para cá para colocá-las no celular."
+        )
         if partial:
             text += " O celular liberou só algumas fotos; para ver todas, toque em Fotos recentes no computador no app."
         return text
@@ -1235,7 +1386,19 @@ def _photo_tile(photo: dict) -> Gtk.Widget | None:
     left = (scaled.get_width() - PHOTO_TILE) // 2
     top = (scaled.get_height() - PHOTO_TILE) // 2
     image = Gtk.Image.new_from_pixbuf(scaled.new_subpixbuf(left, top, PHOTO_TILE, PHOTO_TILE))
-    image.photo = photo
+    tile = Gtk.Overlay()
+    tile.add(image)
+    check = Gtk.CheckButton()
+    check.set_halign(Gtk.Align.END)
+    check.set_valign(Gtk.Align.START)
+    check.set_margin_top(6)
+    check.set_margin_end(6)
+    check.set_tooltip_text("Selecionar")
+    check.get_style_context().add_class("cl-photo-check")
+    tile.add_overlay(check)
+    tile.photo = photo
+    tile.image = image
+    tile.check = check
     tooltip = photo["name"]
     if photo.get("taken"):
         when = datetime.datetime.fromtimestamp(photo["taken"] / 1000)
@@ -1243,7 +1406,7 @@ def _photo_tile(photo: dict) -> Gtk.Widget | None:
     if photo.get("size"):
         tooltip += f"\n{photo['size'] / (1024 * 1024):.1f} MB"
     image.set_tooltip_text(tooltip)
-    return image
+    return tile
 
 
 def _phone_row(device_id: str) -> dict:

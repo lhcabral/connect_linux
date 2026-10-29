@@ -39,8 +39,9 @@ class LinkClient(
         fun onUnpair()
         fun onPhotosRequest(offset: Int, limit: Int)
         fun onPhotoRequest(id: Long)
+        fun onPhotosDelete(ids: List<Long>)
         fun onEvent(text: String)
-        fun openDownload(name: String, mime: String): FileSink
+        fun openDownload(name: String, mime: String, gallery: Boolean): FileSink
         fun onFileSaved(name: String, mime: String, uri: Uri, open: Boolean)
         fun onClosed(reason: String)
     }
@@ -103,6 +104,12 @@ class LinkClient(
                 .put("folder", folder)
                 .put("items", page.items),
         )
+    }
+
+    fun sendPhotosDeleted(ids: List<Long>, ok: Boolean, message: String) {
+        val list = JSONArray()
+        ids.forEach { list.put(it.toString()) }
+        send(JSONObject().put("type", "photos_deleted").put("ids", list).put("ok", ok).put("message", message))
     }
 
     fun sendPhotosError(offset: Int, error: String) {
@@ -354,6 +361,11 @@ class LinkClient(
                 message.optInt("limit", 30),
             )
             "photo_get" -> message.optString("id").toLongOrNull()?.let { listener.onPhotoRequest(it) }
+            "photos_delete" -> {
+                val raw = message.optJSONArray("ids") ?: JSONArray()
+                val ids = (0 until minOf(raw.length(), 500)).mapNotNull { raw.optString(it).toLongOrNull() }
+                if (ids.isNotEmpty()) listener.onPhotosDelete(ids)
+            }
             "notification" -> listener.onText(message.optString("title") + "\n" + message.optString("body"))
             "file_meta" -> handleMeta(message)
             "file_chunk" -> handleChunk(message)
@@ -376,7 +388,7 @@ class LinkClient(
             return
         }
         val sink = try {
-            listener.openDownload(name, mime)
+            listener.openDownload(name, mime, message.optString("dest") == "photos")
         } catch (_: Exception) {
             send(JSONObject().put("type", "file_reject").put("id", id).put("message", "Não foi possível criar o arquivo."))
             return

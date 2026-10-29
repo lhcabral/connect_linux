@@ -83,6 +83,10 @@ Para a imagem abrir sozinha no celular mesmo com o aplicativo em segundo plano, 
 
 Com o celular conectado, abra a aba **Fotos** na janela do computador. Aparecem as últimas fotos da galeria, das mais novas para as mais antigas; **Mostrar mais** traz as anteriores. Clique numa foto para trazê-la inteira: ela abre no visualizador de imagens e fica salva na pasta de recebidos. Se a mesma foto já foi trazida antes, abre a cópia local na hora.
 
+Para **excluir** fotos do celular, marque o quadradinho no canto das miniaturas e clique em **Excluir do celular**. O Android sempre pede a confirmação na tela do celular; se a janela não aparecer sozinha, toque no aviso do Connect Linux.
+
+Para **colocar fotos no celular**, clique em **Enviar fotos** ou arraste imagens do gerenciador de arquivos para a aba Fotos. Elas vão para a pasta `Pictures/Connect Linux` e aparecem na galeria.
+
 Para mostrar só uma pasta (por exemplo Câmera ou WhatsApp Images), toque em **Pasta compartilhada com o computador** nos Ajustes do aplicativo do celular.
 
 Na primeira vez, o celular pede acesso às fotos: toque no aviso do Connect Linux e escolha **Permitir tudo**. Com "acesso limitado", o computador só vê as fotos que você escolher. A permissão também pode ser dada em **Fotos recentes no computador**, no aplicativo do celular. O celular só envia as fotos quando o computador pareado pede.

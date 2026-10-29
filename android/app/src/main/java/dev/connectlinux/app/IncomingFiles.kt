@@ -18,25 +18,31 @@ interface FileSink {
 }
 
 class IncomingFiles(private val context: Context) {
-    fun open(name: String, mime: String): FileSink {
+    /** Com [gallery], a imagem vai para o álbum "Connect Linux" da galeria em vez de Downloads. */
+    fun open(name: String, mime: String, gallery: Boolean = false): FileSink {
         val safe = Protocol.sanitizeFilename(name)
         val type = mime.ifBlank { "application/octet-stream" }.take(100)
-        return if (Build.VERSION.SDK_INT >= 29) openDownloads(safe, type) else openLegacy(safe)
+        val image = type.startsWith("image/") || Protocol.isImageName(safe)
+        return when {
+            Build.VERSION.SDK_INT < 29 -> openLegacy(safe)
+            gallery && image -> openMedia(safe, type, MediaStore.Images.Media.EXTERNAL_CONTENT_URI, GALLERY_FOLDER)
+            else -> openMedia(safe, type, MediaStore.Downloads.EXTERNAL_CONTENT_URI, Environment.DIRECTORY_DOWNLOADS)
+        }
     }
 
-    private fun openDownloads(name: String, mime: String): FileSink {
+    private fun openMedia(name: String, mime: String, collection: Uri, folder: String): FileSink {
         val resolver = context.contentResolver
         val values = ContentValues().apply {
-            put(MediaStore.Downloads.DISPLAY_NAME, name)
-            put(MediaStore.Downloads.MIME_TYPE, mime)
-            put(MediaStore.Downloads.RELATIVE_PATH, Environment.DIRECTORY_DOWNLOADS)
-            put(MediaStore.Downloads.IS_PENDING, 1)
+            put(MediaStore.MediaColumns.DISPLAY_NAME, name)
+            put(MediaStore.MediaColumns.MIME_TYPE, mime)
+            put(MediaStore.MediaColumns.RELATIVE_PATH, folder)
+            put(MediaStore.MediaColumns.IS_PENDING, 1)
         }
-        val uri = resolver.insert(MediaStore.Downloads.EXTERNAL_CONTENT_URI, values)
+        val uri = resolver.insert(collection, values)
             ?: error("não foi possível criar o arquivo")
         val stream = resolver.openOutputStream(uri) ?: error("não foi possível gravar o arquivo")
         return object : FileSink {
-            override val label: String = "Downloads/$name"
+            override val label: String = "$folder/$name"
             override val uri: Uri = uri
             override fun write(bytes: ByteArray) {
                 stream.write(bytes)
@@ -44,7 +50,7 @@ class IncomingFiles(private val context: Context) {
             override fun finish() {
                 stream.flush()
                 stream.close()
-                val done = ContentValues().apply { put(MediaStore.Downloads.IS_PENDING, 0) }
+                val done = ContentValues().apply { put(MediaStore.MediaColumns.IS_PENDING, 0) }
                 resolver.update(uri, done, null, null)
             }
             override fun abort() {
@@ -83,6 +89,10 @@ class IncomingFiles(private val context: Context) {
                 partial.delete()
             }
         }
+    }
+
+    private companion object {
+        val GALLERY_FOLDER = "${Environment.DIRECTORY_PICTURES}/Connect Linux"
     }
 
     private fun uniqueFile(directory: File, name: String): File {

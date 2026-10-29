@@ -20,6 +20,7 @@ import android.os.SystemClock
 import android.os.VibrationEffect
 import android.os.Vibrator
 import android.os.VibratorManager
+import android.provider.Settings
 import androidx.core.app.NotificationCompat
 import androidx.core.content.pm.ShortcutInfoCompat
 import androidx.core.content.pm.ShortcutManagerCompat
@@ -62,6 +63,7 @@ class ConnectService : Service() {
     private var lastNoticeAt = 0L
     private var lastConnectRequestAt = 0L
     private val pendingOutgoing = mutableListOf<Pair<CachedFile, Boolean>>()
+    private var pendingDelete: Pair<LinkClient, List<Long>>? = null
     private lateinit var discovery: DiscoveryClient
 
     override fun onCreate() {
@@ -698,9 +700,14 @@ class ConnectService : Service() {
                 }
             }
 
-            override fun openDownload(name: String, mime: String): FileSink {
+            override fun openDownload(name: String, mime: String, gallery: Boolean): FileSink {
                 if (current != generation.get()) error("conexão encerrada")
-                return IncomingFiles(this@ConnectService).open(name, mime)
+                return IncomingFiles(this@ConnectService).open(name, mime, gallery)
+            }
+
+            override fun onPhotosDelete(ids: List<Long>) {
+                if (current != generation.get()) return
+                photos.execute { deletePhotos(client, ids) }
             }
 
             override fun onFileSaved(name: String, mime: String, uri: Uri, open: Boolean) {
@@ -825,6 +832,74 @@ class ConnectService : Service() {
         main.post { startAsForeground(text) }
     }
 
+    private fun deletePhotos(client: LinkClient, ids: List<Long>) {
+        if (!PhotoLibrary.allowed(this)) {
+            sendDeleted(client, ids, false, "O celular não deu acesso às fotos.")
+            return
+        }
+        if (Build.VERSION.SDK_INT < 30) {
+            val gone = ids.filter { id ->
+                try {
+                    contentResolver.delete(PhotoLibrary.uriFor(id), null, null) > 0
+                } catch (_: Exception) {
+                    false
+                }
+            }
+            val message = if (gone.size == ids.size) "" else "O celular não deixou excluir algumas fotos."
+            sendDeleted(client, gone, gone.isNotEmpty(), message)
+            return
+        }
+        val replaced = synchronized(stateLock) {
+            pendingDelete.also { pendingDelete = client to ids }
+        }
+        replaced?.let { sendDeleted(it.first, emptyList(), false, "Pedido substituído por outro.") }
+        val confirm = Intent(this, DeletePhotosActivity::class.java)
+            .putExtra(DeletePhotosActivity.EXTRA_IDS, ids.toLongArray())
+            .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP)
+        val tap = PendingIntent.getActivity(this, 7, confirm, PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
+        val count = if (ids.size == 1) "1 foto" else "${ids.size} fotos"
+        val body = "O computador pediu para excluir $count. Toque para confirmar."
+        val notification = NotificationCompat.Builder(this, "messages")
+            .setSmallIcon(R.drawable.ic_stat)
+            .setContentTitle("Excluir fotos do celular")
+            .setContentText(body)
+            .setStyle(NotificationCompat.BigTextStyle().bigText(body))
+            .setContentIntent(tap)
+            .setPriority(NotificationCompat.PRIORITY_HIGH)
+            .setAutoCancel(true)
+            .build()
+        getSystemService(NotificationManager::class.java)?.notify(DELETE_NOTIFICATION, notification)
+        if (Settings.canDrawOverlays(this)) {
+            main.post {
+                try {
+                    startActivity(confirm)
+                } catch (_: Exception) {
+                }
+            }
+        }
+    }
+
+    fun finishPhotoDelete(ids: List<Long>, ok: Boolean) {
+        val pending = synchronized(stateLock) {
+            pendingDelete?.takeIf { it.second == ids }.also { if (it != null) pendingDelete = null }
+        } ?: return
+        io.execute {
+            val message = if (ok) "" else "A exclusão foi cancelada no celular."
+            sendDeleted(pending.first, if (ok) ids else emptyList(), ok, message)
+        }
+    }
+
+    private fun sendDeleted(client: LinkClient, ids: List<Long>, ok: Boolean, message: String) {
+        try {
+            client.sendPhotosDeleted(ids, ok, message)
+        } catch (_: Exception) {
+        }
+        if (ok && ids.isNotEmpty()) {
+            val count = if (ids.size == 1) "1 foto excluída" else "${ids.size} fotos excluídas"
+            update { it.copy(lastEvent = "$count pelo computador.") }
+        }
+    }
+
     private fun askPhotoPermission() {
         val open = PendingIntent.getActivity(
             this,
@@ -887,6 +962,7 @@ class ConnectService : Service() {
         const val EXTRA_MIMES = "dev.connectlinux.app.extra.MIMES"
         const val EXTRA_OPEN = "dev.connectlinux.app.extra.OPEN"
         const val EXTRA_ASK_PHOTOS = "dev.connectlinux.app.extra.ASK_PHOTOS"
+        const val DELETE_NOTIFICATION = 7
         const val SHARE_CATEGORY = "dev.connectlinux.app.category.COMPUTER"
 
         @Volatile

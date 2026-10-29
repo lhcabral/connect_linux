@@ -107,7 +107,7 @@ class ConversationTests(unittest.IsolatedAsyncioTestCase):
     def _on_event(self, kind: str, payload: dict) -> None:
         if kind == "pair" and payload.get("code"):
             self.codes.append(str(payload["code"]))
-        if kind == "photos":
+        if kind in ("photos", "photos_deleted"):
             self.photo_pages.append(payload)
 
     async def test_pair_clipboard_file_and_reconnect(self) -> None:
@@ -362,6 +362,26 @@ class ConversationTests(unittest.IsolatedAsyncioTestCase):
         await peer.send({"type": "ping", "ts": 3})
         await peer.recv_type("pong")
         self.assertEqual(self.photo_pages[-1]["error"], "permission")
+
+        await self.server.delete_photos(device_id, ["42", "x", "43"])
+        asked = await peer.recv_type("photos_delete")
+        self.assertEqual(asked["ids"], [42, 43])
+        await peer.send({"type": "photos_deleted", "ids": [42, "43", True], "ok": True, "message": ""})
+        await peer.send({"type": "ping", "ts": 4})
+        await peer.recv_type("pong")
+        self.assertEqual(self.photo_pages[-1], {"device_id": device_id, "ids": ["42"], "ok": True, "message": ""})
+        with self.assertRaises(ValueError):
+            await self.server.delete_photos(device_id, ["abc"])
+
+        upload = Path(self.tmp.name) / "viagem.png"
+        upload.write_bytes(b"png!")
+        sending = asyncio.create_task(self.server.send_file(device_id, upload, dest="photos"))
+        meta = await peer.recv_type("file_meta")
+        self.assertEqual((meta["name"], meta["dest"]), ("viagem.png", "photos"))
+        await peer.send({"type": "file_accept", "id": meta["id"]})
+        await peer.recv_type("file_chunk")
+        await peer.send({"type": "file_complete", "id": meta["id"], "ok": True})
+        self.assertTrue(await sending)
         peer.writer.close()
 
     async def _connect(self, device_id: str, name: str):
