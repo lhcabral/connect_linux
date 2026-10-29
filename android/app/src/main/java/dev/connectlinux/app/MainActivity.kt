@@ -329,7 +329,6 @@ class MainActivity : AppCompatActivity() {
         binding.openBatterySettings.setOnClickListener {
             startActivity(Intent(Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS))
         }
-        binding.prepareMirror.setOnClickListener { prepareMirror() }
         binding.openOverlayRow.setOnClickListener {
             Toast.makeText(this, "Ative \"Sobrepor a outros apps\" para o Connect Linux.", Toast.LENGTH_LONG).show()
             startActivity(Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION, Uri.parse("package:$packageName")))
@@ -343,11 +342,6 @@ class MainActivity : AppCompatActivity() {
             "Permitido"
         } else {
             "Não permitido: toque para permitir"
-        }
-        binding.mirrorState.text = when {
-            usbDebuggingEnabled() -> "Pronto: conecte o cabo e clique em Espelhar tela no computador"
-            developerOptionsEnabled() -> "Falta ligar a Depuração USB: toque para ver como"
-            else -> "Precisa de uma configuração única: toque para ver como"
         }
         val update = pendingUpdate
         if (update != null && packageManager.canRequestPackageInstalls()) {
@@ -512,57 +506,6 @@ class MainActivity : AppCompatActivity() {
         val clip: ClipData = clipboardManager()?.primaryClip ?: return ""
         if (clip.itemCount == 0) return ""
         return clip.getItemAt(0).coerceToText(this)?.toString().orEmpty()
-    }
-
-    private fun developerOptionsEnabled(): Boolean =
-        Settings.Global.getInt(contentResolver, Settings.Global.DEVELOPMENT_SETTINGS_ENABLED, 0) == 1
-
-    private fun usbDebuggingEnabled(): Boolean =
-        Settings.Global.getInt(contentResolver, Settings.Global.ADB_ENABLED, 0) == 1
-
-    private fun prepareMirror() {
-        val (message, action, intent) = when {
-            usbDebuggingEnabled() -> Triple(
-                "A Depuração USB já está ligada.\n\n" +
-                    "1. Conecte o celular ao computador pelo cabo USB.\n" +
-                    "2. No computador, clique em Espelhar tela (na janela ou no ícone ao lado do relógio).\n" +
-                    "3. Na primeira vez, aceite \"Permitir depuração USB\" aqui no celular.",
-                null,
-                null,
-            )
-            developerOptionsEnabled() -> Triple(
-                "Falta só ligar a Depuração USB.\n\n" +
-                    "Na tela que vai abrir, procure \"Depuração USB\" e ligue a chave. " +
-                    "Depois volte para o Connect Linux.",
-                "Abrir opções do desenvolvedor",
-                Intent(Settings.ACTION_APPLICATION_DEVELOPMENT_SETTINGS),
-            )
-            else -> Triple(
-                "O Android só permite espelhar a tela depois de uma configuração feita por você, uma única vez:\n\n" +
-                    "1. Na tela que vai abrir, entre em \"Informações do software\" e toque 7 vezes em " +
-                    "\"Número de compilação\" até aparecer \"Modo de desenvolvedor ativado\".\n" +
-                    "2. Volte às Configurações, abra \"Opções do desenvolvedor\" e ligue \"Depuração USB\".\n" +
-                    "3. Volte para o Connect Linux.",
-                "Abrir configurações",
-                Intent(Settings.ACTION_DEVICE_INFO_SETTINGS),
-            )
-        }
-        val dialog = MaterialAlertDialogBuilder(this)
-            .setTitle("Espelhar a tela no computador")
-            .setMessage(message)
-        if (action != null && intent != null) {
-            dialog.setPositiveButton(action) { _, _ ->
-                try {
-                    startActivity(intent)
-                } catch (_: Exception) {
-                    startActivity(Intent(Settings.ACTION_SETTINGS))
-                }
-            }
-            dialog.setNegativeButton("Agora não", null)
-        } else {
-            dialog.setPositiveButton("Entendi", null)
-        }
-        dialog.show()
     }
 
     private fun notificationAccessEnabled(): Boolean {

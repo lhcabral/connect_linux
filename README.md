@@ -69,7 +69,6 @@ Depois do primeiro pareamento, o celular reconecta sozinho pelo mesmo caminho.
 - Ver a bateria e chamar o outro aparelho (som no computador, vibração no celular).
 - Compartilhar do celular pelo menu Compartilhar do Android.
 - Abrir uma imagem na tela do outro aparelho (veja abaixo).
-- Espelhar e controlar a tela do celular no computador (veja abaixo).
 - Iniciar junto com o Linux, só com o ícone ao lado do relógio. Vem ligado depois da primeira vez que o programa é aberto; para desligar, desmarque **Iniciar com o Linux** na janela.
 
 ### Abrir uma imagem na tela do outro aparelho
@@ -78,12 +77,6 @@ Depois do primeiro pareamento, o celular reconecta sozinho pelo mesmo caminho.
 - **Do celular para o computador:** na Galeria, toque em Compartilhar e escolha **Abrir no computador**. A imagem abre no visualizador padrão do Linux.
 
 Para a imagem abrir sozinha no celular mesmo com o aplicativo em segundo plano, toque em **Abrir na tela as imagens do computador** e permita "Sobrepor a outros apps". Sem essa permissão, aparece uma notificação: toque nela para ver a imagem.
-
-### Espelhar a tela do celular
-
-Clique em **Espelhar tela** na janela ou no menu do ícone ao lado do relógio. A tela do celular abre numa janela e dá para usar o mouse e o teclado do computador. O espelhamento usa o [scrcpy](https://github.com/Genymobile/scrcpy), que o pacote `.deb` instala junto.
-
-O Android exige a **Depuração USB** ligada, e só você pode ligá-la. No aplicativo do celular, toque em **Espelhar a tela no computador**: ele mostra o que falta e abre a tela certa das configurações. Depois conecte o cabo e aceite "Permitir depuração USB" na primeira vez. Para espelhar sem fio, rode uma vez com o cabo conectado `adb tcpip 5555`; até o celular reiniciar, o Connect Linux espelha pelo Wi-Fi.
 
 Arquivos recebidos no computador vão para `~/ConnectLinux/Recebidos`. No celular, vão para a pasta Downloads. O limite é 100 MB por arquivo.
 

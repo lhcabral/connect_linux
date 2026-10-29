@@ -18,9 +18,6 @@ fi
 if ! command -v notify-send >/dev/null 2>&1; then
   echo "Para os avisos na área de trabalho: sudo apt install libnotify-bin"
 fi
-if ! command -v scrcpy >/dev/null 2>&1; then
-  echo "Para espelhar a tela do celular: sudo apt install scrcpy adb"
-fi
 if ! python3 -c "import gi; gi.require_version('XApp', '1.0'); from gi.repository import XApp" >/dev/null 2>&1; then
   echo "Para o ícone ao lado do relógio: sudo apt install gir1.2-xapp-1.0"
 fi

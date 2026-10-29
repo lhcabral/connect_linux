@@ -94,7 +94,6 @@ class DesktopWindow:
         self._tray = TrayIcon(
             on_present=self._present,
             on_connect=self._connect_phone,
-            on_mirror=self._mirror,
             on_minimize=self._minimize,
             on_maximize=self._maximize,
             on_quit=self._quit,
@@ -244,10 +243,6 @@ class DesktopWindow:
             button.connect("clicked", lambda _b, fn=handler: fn())
             actions.pack_start(button, False, False, 0)
             self.action_buttons.append(button)
-        mirror = _icon_button("video-display-symbolic", "Espelhar tela")
-        mirror.set_tooltip_text("Mostra e controla a tela do celular aqui (scrcpy, por cabo USB ou Wi-Fi)")
-        mirror.connect("clicked", lambda _b: self._mirror())
-        actions.pack_start(mirror, False, False, 0)
         self.forget_button = _icon_button("user-trash-symbolic", "Esquecer")
         self.forget_button.connect("clicked", lambda _b: self._forget())
         actions.pack_end(self.forget_button, False, False, 0)
@@ -559,10 +554,6 @@ class DesktopWindow:
             destructive=True,
         ):
             self.app.forget(row["id"])
-
-    def _mirror(self) -> None:
-        row = self._selected()
-        self.app.mirror_screen(row["id"] if row else "")
 
     def _connect_phone(self) -> None:
         message = self.app.connect_known_phones()
