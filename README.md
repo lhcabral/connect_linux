@@ -69,6 +69,7 @@ Depois do primeiro pareamento, o celular reconecta sozinho pelo mesmo caminho.
 - Ver a bateria e chamar o outro aparelho (som no computador, vibração no celular).
 - Compartilhar do celular pelo menu Compartilhar do Android.
 - Abrir uma imagem na tela do outro aparelho (veja abaixo).
+- Ver as fotos recentes do celular no computador, na aba **Fotos**, e abrir qualquer uma com um clique.
 - Iniciar junto com o Linux, só com o ícone ao lado do relógio. Vem ligado depois da primeira vez que o programa é aberto; para desligar, desmarque **Iniciar com o Linux** na janela.
 
 ### Abrir uma imagem na tela do outro aparelho
@@ -77,6 +78,12 @@ Depois do primeiro pareamento, o celular reconecta sozinho pelo mesmo caminho.
 - **Do celular para o computador:** na Galeria, toque em Compartilhar e escolha **Abrir no computador**. A imagem abre no visualizador padrão do Linux.
 
 Para a imagem abrir sozinha no celular mesmo com o aplicativo em segundo plano, toque em **Abrir na tela as imagens do computador** e permita "Sobrepor a outros apps". Sem essa permissão, aparece uma notificação: toque nela para ver a imagem.
+
+### Fotos recentes do celular
+
+Com o celular conectado, abra a aba **Fotos** na janela do computador. Aparecem as últimas fotos da galeria, das mais novas para as mais antigas; **Mostrar mais** traz as anteriores. Clique numa foto para trazê-la inteira: ela abre no visualizador de imagens e fica salva na pasta de recebidos. Se a mesma foto já foi trazida antes, abre a cópia local na hora.
+
+Na primeira vez, o celular pede acesso às fotos: toque no aviso do Connect Linux e permita. A permissão também pode ser dada em **Fotos recentes no computador**, no aplicativo do celular. O celular só envia as fotos quando o computador pareado pede.
 
 Arquivos recebidos no computador vão para `~/ConnectLinux/Recebidos`. No celular, vão para a pasta Downloads. O limite é 100 MB por arquivo.
 

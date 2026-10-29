@@ -64,6 +64,18 @@ class MainActivity : AppCompatActivity() {
             Toast.makeText(this, "Sem a permissão de Bluetooth não dá para conectar por Bluetooth.", Toast.LENGTH_LONG).show()
         }
     }
+    private val requestPhotos = registerForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
+        renderPhotosAccess()
+        when {
+            granted -> Toast.makeText(this, "Pronto. No computador, abra a aba Fotos e clique em Atualizar.", Toast.LENGTH_LONG).show()
+            shouldShowRequestPermissionRationale(PhotoLibrary.permission) ->
+                Toast.makeText(this, "Sem essa permissão o computador não consegue ver as fotos.", Toast.LENGTH_LONG).show()
+            else -> {
+                Toast.makeText(this, "Em Permissões, permita Fotos e vídeos para o Connect Linux.", Toast.LENGTH_LONG).show()
+                startActivity(Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.parse("package:$packageName")))
+            }
+        }
+    }
     private val pickFile = registerForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
         if (uri != null) service?.sendFile(uri)
     }
@@ -82,6 +94,7 @@ class MainActivity : AppCompatActivity() {
         bindActions()
         bindUpdates()
         handleShare(intent)
+        handlePhotoRequest(intent)
         if (Build.VERSION.SDK_INT >= 33 &&
             ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED
         ) {
@@ -253,6 +266,29 @@ class MainActivity : AppCompatActivity() {
         setIntent(intent)
         handleShare(intent)
         flushShare()
+        handlePhotoRequest(intent)
+    }
+
+    private fun handlePhotoRequest(intent: Intent?) {
+        if (intent?.getBooleanExtra(ConnectService.EXTRA_ASK_PHOTOS, false) != true) return
+        intent.removeExtra(ConnectService.EXTRA_ASK_PHOTOS)
+        if (!PhotoLibrary.allowed(this)) requestPhotos.launch(PhotoLibrary.permission)
+    }
+
+    private fun renderPhotosAccess() {
+        binding.photosAccessState.text = if (PhotoLibrary.allowed(this)) {
+            "Permitido: veja as fotos na aba Fotos do computador"
+        } else {
+            "Não permitido: toque para permitir"
+        }
+    }
+
+    private fun openPhotosAccess() {
+        if (PhotoLibrary.allowed(this)) {
+            Toast.makeText(this, "No computador, abra a aba Fotos do Connect Linux.", Toast.LENGTH_LONG).show()
+        } else {
+            requestPhotos.launch(PhotoLibrary.permission)
+        }
     }
 
     private fun bindActions() {
@@ -329,6 +365,7 @@ class MainActivity : AppCompatActivity() {
         binding.openBatterySettings.setOnClickListener {
             startActivity(Intent(Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS))
         }
+        binding.photosAccess.setOnClickListener { openPhotosAccess() }
         binding.openOverlayRow.setOnClickListener {
             Toast.makeText(this, "Ative \"Sobrepor a outros apps\" para o Connect Linux.", Toast.LENGTH_LONG).show()
             startActivity(Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION, Uri.parse("package:$packageName")))
@@ -338,6 +375,7 @@ class MainActivity : AppCompatActivity() {
     override fun onResume() {
         super.onResume()
         binding.openOverlaySettings.visibility = if (Settings.canDrawOverlays(this)) View.GONE else View.VISIBLE
+        renderPhotosAccess()
         binding.notifAccessState.text = if (notificationAccessEnabled()) {
             "Permitido"
         } else {

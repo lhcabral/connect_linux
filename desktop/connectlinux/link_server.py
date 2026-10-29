@@ -25,7 +25,10 @@ from .protocol import (
     MAX_CHUNK_RAW,
     MAX_CLIPBOARD,
     MAX_FILE_BYTES,
+    MAX_PHOTO_PAGE,
+    MAX_THUMB_B64,
     PAIR_ATTEMPTS,
+    PHOTO_PAGE,
     PAIR_TTL_SECONDS,
     UUID_RE,
     ProtocolError,
@@ -191,6 +194,18 @@ class LinkServer:
         if session is None:
             raise ConnectionError("celular desconectado")
         await session.send({"type": "find"})
+
+    async def request_photos(self, device_id: str, offset: int = 0, limit: int = PHOTO_PAGE) -> None:
+        session = self.sessions.get(device_id)
+        if session is None:
+            raise ConnectionError("celular desconectado")
+        await session.send({"type": "photos_list", "offset": max(0, offset), "limit": min(limit, MAX_PHOTO_PAGE)})
+
+    async def request_photo(self, device_id: str, photo_id: str) -> None:
+        session = self.sessions.get(device_id)
+        if session is None:
+            raise ConnectionError("celular desconectado")
+        await session.send({"type": "photo_get", "id": photo_id})
 
     async def forget_device(self, device_id: str) -> None:
         session = self.sessions.get(device_id)
@@ -573,6 +588,9 @@ class LinkServer:
         if kind == "notification":
             self._on_notification(session, message)
             return
+        if kind == "photos":
+            self._on_photos(session, message)
+            return
         if kind == "battery":
             level = message.get("level")
             if isinstance(level, int) and 0 <= level <= 100:
@@ -650,6 +668,50 @@ class LinkServer:
             return
         self.notify(title or app_name, body or app_name)
         self._log(f"Notificação de {app_name}: {title}")
+
+    def _on_photos(self, session: Session, message: dict) -> None:
+        items = []
+        raw_items = message.get("items")
+        for raw in raw_items[:MAX_PHOTO_PAGE] if isinstance(raw_items, list) else []:
+            if not isinstance(raw, dict):
+                continue
+            photo_id = str(raw.get("id", ""))
+            thumb = raw.get("thumb")
+            if not photo_id.isdigit() or len(photo_id) > 20:
+                continue
+            if not isinstance(thumb, str) or len(thumb) > MAX_THUMB_B64:
+                continue
+            try:
+                thumb_bytes = base64.b64decode(thumb, validate=True)
+                size = int(raw.get("size", 0))
+                taken = int(raw.get("taken", 0))
+            except (TypeError, ValueError):
+                continue
+            items.append(
+                {
+                    "id": photo_id,
+                    "name": bridge.sanitize_filename(str(raw.get("name", ""))),
+                    "size": size,
+                    "taken": taken,
+                    "thumb": thumb_bytes,
+                }
+            )
+        offset = message.get("offset")
+        offset = offset if isinstance(offset, int) else 0
+        following = message.get("next")
+        if self.on_event:
+            self.on_event(
+                "photos",
+                {
+                    "device_id": session.device_id,
+                    "name": session.name,
+                    "offset": offset,
+                    "next": following if isinstance(following, int) and following > offset else offset + len(items),
+                    "more": bool(message.get("more")),
+                    "error": str(message.get("error", ""))[:40],
+                    "items": items,
+                },
+            )
 
     async def _on_file_meta(self, session: Session, message: dict) -> None:
         file_id = str(message.get("id", ""))

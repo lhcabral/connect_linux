@@ -39,6 +39,7 @@ class ConnectService : Service() {
     private val store by lazy { DeviceStore(this) }
     private val commands = Executors.newSingleThreadExecutor()
     private val io = Executors.newCachedThreadPool()
+    private val photos = Executors.newSingleThreadExecutor()
     private val scheduler = Executors.newSingleThreadScheduledExecutor()
     private val main = Handler(Looper.getMainLooper())
     private val listeners = CopyOnWriteArrayList<(UiState) -> Unit>()
@@ -143,6 +144,7 @@ class ConnectService : Service() {
         link?.close()
         commands.shutdownNow()
         io.shutdownNow()
+        photos.shutdownNow()
         scheduler.shutdownNow()
         stopForeground(STOP_FOREGROUND_REMOVE)
         super.onDestroy()
@@ -653,6 +655,35 @@ class ConnectService : Service() {
                 }
             }
 
+            override fun onPhotosRequest(offset: Int, limit: Int) {
+                if (current != generation.get()) return
+                photos.execute {
+                    try {
+                        if (PhotoLibrary.allowed(this@ConnectService)) {
+                            client.sendPhotos(offset, PhotoLibrary.recent(this@ConnectService, offset, limit))
+                        } else {
+                            client.sendPhotosError(offset, "permission")
+                            askPhotoPermission()
+                        }
+                    } catch (_: Exception) {
+                    }
+                }
+            }
+
+            override fun onPhotoRequest(id: Long) {
+                if (current != generation.get()) return
+                photos.execute {
+                    if (!PhotoLibrary.allowed(this@ConnectService)) return@execute
+                    val cached = try {
+                        Outbox.copy(this@ConnectService, PhotoLibrary.uriFor(id))
+                    } catch (exc: Exception) {
+                        update { it.copy(lastEvent = exc.message ?: "Não foi possível ler a foto.") }
+                        return@execute
+                    }
+                    sendCached(client, cached, open = true)
+                }
+            }
+
             override fun onEvent(text: String) {
                 if (current != generation.get()) return
                 update { state ->
@@ -788,6 +819,27 @@ class ConnectService : Service() {
         main.post { startAsForeground(text) }
     }
 
+    private fun askPhotoPermission() {
+        val open = PendingIntent.getActivity(
+            this,
+            6,
+            Intent(this, MainActivity::class.java)
+                .putExtra(EXTRA_ASK_PHOTOS, true)
+                .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP),
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
+        )
+        val body = "O computador quer mostrar suas fotos recentes. Toque para permitir."
+        val notification = NotificationCompat.Builder(this, "messages")
+            .setSmallIcon(R.drawable.ic_stat)
+            .setContentTitle("Permitir acesso às fotos")
+            .setContentText(body)
+            .setStyle(NotificationCompat.BigTextStyle().bigText(body))
+            .setContentIntent(open)
+            .setAutoCancel(true)
+            .build()
+        getSystemService(NotificationManager::class.java)?.notify(6, notification)
+    }
+
     private fun notifyUser(title: String, body: String, id: Int, channel: String = "messages") {
         val notification = NotificationCompat.Builder(this, channel)
             .setSmallIcon(R.drawable.ic_stat)
@@ -828,6 +880,7 @@ class ConnectService : Service() {
         const val EXTRA_NAMES = "dev.connectlinux.app.extra.NAMES"
         const val EXTRA_MIMES = "dev.connectlinux.app.extra.MIMES"
         const val EXTRA_OPEN = "dev.connectlinux.app.extra.OPEN"
+        const val EXTRA_ASK_PHOTOS = "dev.connectlinux.app.extra.ASK_PHOTOS"
         const val SHARE_CATEGORY = "dev.connectlinux.app.category.COMPUTER"
 
         @Volatile

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import datetime
 import shutil
 import signal
 import subprocess
@@ -76,6 +77,10 @@ class DesktopWindow:
         self._phone_rows: dict[str, dict] = {}
         self._codes: dict[str, tuple[str, str]] = {}
         self._help: Gtk.Window | None = None
+        self._photos_device: str | None = None
+        self._photos_count = 0
+        self._photos_next = 0
+        self._photos_wait: int | None = None
 
         _load_css()
         self.window = Gtk.Window(title="Connect Linux")
@@ -161,8 +166,10 @@ class DesktopWindow:
         header.pack_end(self.update_button)
 
         self.stack.add_titled(self._build_phones_page(), "phones", "Celulares")
+        self.stack.add_titled(self._build_photos_page(), "photos", "Fotos")
         self.stack.add_titled(self._build_settings_page(), "settings", "Ajustes")
         self.stack.add_titled(self._build_activity_page(), "activity", "Atividade")
+        self.stack.connect("notify::visible-child-name", lambda *_args: self._photos_page_shown())
         self.window.add(self.stack)
 
     def _build_phones_page(self) -> Gtk.Widget:
@@ -325,6 +332,42 @@ class DesktopWindow:
         page.pack_start(_card(links), False, False, 0)
         return _scrolled(page)
 
+    def _build_photos_page(self) -> Gtk.Widget:
+        page = _page()
+        top = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8)
+        self.photos_title = _label("Fotos recentes do celular", "cl-section")
+        top.pack_start(self.photos_title, False, False, 0)
+        self.photos_spinner = Gtk.Spinner()
+        top.pack_start(self.photos_spinner, False, False, 0)
+        refresh = _icon_button("view-refresh-symbolic", "Atualizar")
+        refresh.connect("clicked", lambda _b: self._load_photos(reset=True))
+        top.pack_end(refresh, False, False, 0)
+        folder = _icon_button("folder-pictures-symbolic", "Pasta de recebidos")
+        folder.connect("clicked", lambda _b: self._open_folder())
+        top.pack_end(folder, False, False, 0)
+        page.pack_start(top, False, False, 0)
+
+        self.photos_hint = _label("", "cl-dim", wrap=True)
+        page.pack_start(self.photos_hint, False, False, 0)
+
+        self.photo_grid = Gtk.FlowBox()
+        self.photo_grid.set_valign(Gtk.Align.START)
+        self.photo_grid.set_homogeneous(True)
+        self.photo_grid.set_min_children_per_line(2)
+        self.photo_grid.set_max_children_per_line(12)
+        self.photo_grid.set_column_spacing(8)
+        self.photo_grid.set_row_spacing(8)
+        self.photo_grid.set_selection_mode(Gtk.SelectionMode.NONE)
+        self.photo_grid.connect("child-activated", lambda _grid, child: self._open_photo(child))
+        page.pack_start(self.photo_grid, False, False, 0)
+
+        self.photos_more = Gtk.Button(label="Mostrar mais")
+        self.photos_more.set_halign(Gtk.Align.CENTER)
+        self.photos_more.set_no_show_all(True)
+        self.photos_more.connect("clicked", lambda _b: self._load_photos(reset=False))
+        page.pack_start(self.photos_more, False, False, 0)
+        return _scrolled(page)
+
     def _build_activity_page(self) -> Gtk.Widget:
         page = _page()
         top = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL)
@@ -367,7 +410,10 @@ class DesktopWindow:
                 else:
                     self._codes.pop(conn_id, None)
                 self._render_pair()
+            elif kind == "photos":
+                self._show_photos(payload)
         self._rows = self.app.snapshot()
+        self._photos_page_shown()
         self._render_phones()
         self._render_hero()
         self._render_links()
@@ -489,6 +535,94 @@ class DesktopWindow:
         return "Connect Linux: aguardando o celular"
 
     # ---------- ações ----------
+
+    # ---------- fotos ----------
+
+    def _photo_phone(self) -> dict | None:
+        row = self._selected()
+        if row and row.get("online"):
+            return row
+        return next((item for item in self._rows if item.get("online")), None)
+
+    def _photos_page_shown(self) -> None:
+        if self.stack.get_visible_child_name() != "photos" or self._photos_wait is not None:
+            return
+        phone = self._photo_phone()
+        if phone is None:
+            self._photos_device = None
+            _set_text(self.photos_hint, "Conecte o celular para ver as fotos recentes dele.")
+            return
+        if self._photos_device != phone["id"]:
+            self._load_photos(reset=True)
+
+    def _load_photos(self, reset: bool) -> None:
+        phone = self._photo_phone()
+        if phone is None:
+            _set_text(self.photos_hint, "Conecte o celular para ver as fotos recentes dele.")
+            return
+        if reset or phone["id"] != self._photos_device:
+            for child in self.photo_grid.get_children():
+                self.photo_grid.remove(child)
+            self._photos_count = 0
+            self._photos_next = 0
+            self.photos_more.hide()
+        self._photos_device = phone["id"]
+        _set_text(self.photos_title, f"Fotos recentes de {phone['name']}")
+        _set_text(self.photos_hint, "Buscando as fotos no celular…")
+        self.photos_spinner.start()
+        if self._photos_wait is not None:
+            GLib.source_remove(self._photos_wait)
+        self._photos_wait = GLib.timeout_add_seconds(25, self._photos_timeout)
+        self.app.request_photos(phone["id"], self._photos_next)
+
+    def _photos_timeout(self) -> bool:
+        self._photos_wait = None
+        self.photos_spinner.stop()
+        _set_text(
+            self.photos_hint,
+            "O celular não respondeu. Atualize o Connect Linux no celular e clique em Atualizar.",
+        )
+        return False
+
+    def _show_photos(self, payload: dict) -> None:
+        if payload.get("device_id") != self._photos_device:
+            return
+        if self._photos_wait is not None:
+            GLib.source_remove(self._photos_wait)
+            self._photos_wait = None
+        self.photos_spinner.stop()
+        if payload.get("error") == "permission":
+            _set_text(
+                self.photos_hint,
+                "O celular ainda não deu acesso às fotos. Toque no aviso do Connect Linux no celular, "
+                "permita o acesso e clique em Atualizar.",
+            )
+            return
+        if payload.get("offset", 0) != self._photos_next:
+            return
+        self._photos_next = payload.get("next", self._photos_next)
+        for photo in payload.get("items", []):
+            tile = _photo_tile(photo)
+            if tile is None:
+                continue
+            self.photo_grid.add(tile)
+            tile.show_all()
+            self._photos_count += 1
+        self.photos_more.set_visible(bool(payload.get("more")))
+        if self._photos_count:
+            _set_text(self.photos_hint, "Clique numa foto para abri-la aqui. Ela fica salva na pasta de recebidos.")
+        else:
+            _set_text(self.photos_hint, "Nenhuma foto encontrada no celular.")
+
+    def _open_photo(self, child: Gtk.FlowBoxChild) -> None:
+        photo = getattr(child.get_child(), "photo", None)
+        if photo is None or self._photos_device is None:
+            return
+        if not any(row["id"] == self._photos_device and row.get("online") for row in self._rows):
+            self._message("O celular desconectou. Conecte de novo para abrir a foto.")
+            return
+        self.app.open_phone_photo(self._photos_device, photo)
+        _set_text(self.photos_hint, f"Abrindo {photo['name']}…")
 
     def _selected(self) -> dict | None:
         selected = self.phone_list.get_selected_row()
@@ -1051,6 +1185,40 @@ def _setting_row(icon: str, title: str, subtitle: str, end: Gtk.Widget | None) -
     row.add(box)
     row.subtitle = detail
     return row
+
+
+PHOTO_TILE = 150
+
+
+def _photo_tile(photo: dict) -> Gtk.Widget | None:
+    loader = GdkPixbuf.PixbufLoader()
+    try:
+        loader.write(photo["thumb"])
+        loader.close()
+    except GLib.Error:
+        return None
+    pixbuf = loader.get_pixbuf()
+    if pixbuf is None:
+        return None
+    width, height = pixbuf.get_width(), pixbuf.get_height()
+    scale = PHOTO_TILE / min(width, height)
+    scaled = pixbuf.scale_simple(
+        max(PHOTO_TILE, round(width * scale)),
+        max(PHOTO_TILE, round(height * scale)),
+        GdkPixbuf.InterpType.BILINEAR,
+    )
+    left = (scaled.get_width() - PHOTO_TILE) // 2
+    top = (scaled.get_height() - PHOTO_TILE) // 2
+    image = Gtk.Image.new_from_pixbuf(scaled.new_subpixbuf(left, top, PHOTO_TILE, PHOTO_TILE))
+    image.photo = photo
+    tooltip = photo["name"]
+    if photo.get("taken"):
+        when = datetime.datetime.fromtimestamp(photo["taken"] / 1000)
+        tooltip += "\n" + when.strftime("%d/%m/%Y %H:%M")
+    if photo.get("size"):
+        tooltip += f"\n{photo['size'] / (1024 * 1024):.1f} MB"
+    image.set_tooltip_text(tooltip)
+    return image
 
 
 def _phone_row(device_id: str) -> dict:

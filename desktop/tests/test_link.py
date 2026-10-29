@@ -72,6 +72,7 @@ class ConversationTests(unittest.IsolatedAsyncioTestCase):
         self.urls: list[str] = []
         self.sounds: list[str] = []
         self.codes: list[str] = []
+        self.photo_pages: list[dict] = []
         self.server = LinkServer(
             self.store,
             host="127.0.0.1",
@@ -106,6 +107,8 @@ class ConversationTests(unittest.IsolatedAsyncioTestCase):
     def _on_event(self, kind: str, payload: dict) -> None:
         if kind == "pair" and payload.get("code"):
             self.codes.append(str(payload["code"]))
+        if kind == "photos":
+            self.photo_pages.append(payload)
 
     async def test_pair_clipboard_file_and_reconnect(self) -> None:
         device_id = str(uuid.uuid4())
@@ -291,6 +294,68 @@ class ConversationTests(unittest.IsolatedAsyncioTestCase):
         self.assertIn("corrompido", failed["message"])
         self.assertFalse((self.store.download_dir / "nota.txt").exists())
         self.assertFalse((self.store.download_dir / "nota.txt.part").exists())
+        peer.writer.close()
+
+    async def test_recent_photos_list_and_fetch(self) -> None:
+        device_id = str(uuid.uuid4())
+        peer = await self._connect(device_id, "Celular das fotos")
+        await peer.recv_type("hello_ack")
+        await peer.send({"type": "pair_request"})
+        await peer.recv_type("pair_required")
+        await peer.send({"type": "pair_submit", "code": self.codes[-1]})
+        await peer.recv_type("pair_ok")
+
+        await self.server.request_photos(device_id, offset=0, limit=500)
+        asked = await peer.recv_type("photos_list")
+        self.assertEqual((asked["offset"], asked["limit"]), (0, 60))
+        thumb = base64.b64encode(b"\xff\xd8miniatura").decode("ascii")
+        await peer.send(
+            {
+                "type": "photos",
+                "offset": 0,
+                "next": 3,
+                "more": True,
+                "items": [
+                    {"id": "42", "name": "../praia.jpg", "size": 7, "taken": 1, "thumb": thumb},
+                    {"id": "abc", "name": "ruim.jpg", "size": 1, "taken": 1, "thumb": thumb},
+                    {"id": "43", "name": "sem.jpg", "size": 1, "taken": 1, "thumb": "%%%"},
+                ],
+            }
+        )
+        await peer.send({"type": "ping", "ts": 2})
+        await peer.recv_type("pong")
+        page = self.photo_pages[-1]
+        self.assertEqual(page["device_id"], device_id)
+        self.assertEqual([item["id"] for item in page["items"]], ["42"])
+        self.assertEqual(page["items"][0]["name"], "praia.jpg")
+        self.assertEqual((page["next"], page["more"]), (3, True))
+
+        await self.server.request_photo(device_id, "42")
+        wanted = await peer.recv_type("photo_get")
+        self.assertEqual(wanted["id"], "42")
+        photo = b"jpegzz"
+        await peer.send(
+            {
+                "type": "file_meta",
+                "id": "f42",
+                "name": "praia.jpg",
+                "size": len(photo),
+                "mime": "image/jpeg",
+                "sha256": hashlib.sha256(photo).hexdigest(),
+                "open": True,
+            }
+        )
+        await peer.recv_type("file_accept")
+        await peer.send(
+            {"type": "file_chunk", "id": "f42", "seq": 0, "last": True, "data": base64.b64encode(photo).decode()}
+        )
+        await peer.recv_type("file_complete")
+        self.assertEqual([path.name for path in self.opened], ["praia.jpg"])
+
+        await peer.send({"type": "photos", "offset": 0, "error": "permission", "items": []})
+        await peer.send({"type": "ping", "ts": 3})
+        await peer.recv_type("pong")
+        self.assertEqual(self.photo_pages[-1]["error"], "permission")
         peer.writer.close()
 
     async def _connect(self, device_id: str, name: str):

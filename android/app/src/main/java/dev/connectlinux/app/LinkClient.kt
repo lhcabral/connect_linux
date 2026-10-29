@@ -3,6 +3,7 @@ package dev.connectlinux.app
 import android.content.Context
 import android.net.Uri
 import android.util.Base64
+import org.json.JSONArray
 import org.json.JSONObject
 import java.io.EOFException
 import java.io.File
@@ -36,6 +37,8 @@ class LinkClient(
         fun onBattery(level: Int, charging: Boolean)
         fun onLatency(ms: Int)
         fun onUnpair()
+        fun onPhotosRequest(offset: Int, limit: Int)
+        fun onPhotoRequest(id: Long)
         fun onEvent(text: String)
         fun openDownload(name: String, mime: String): FileSink
         fun onFileSaved(name: String, mime: String, uri: Uri, open: Boolean)
@@ -85,6 +88,21 @@ class LinkClient(
 
     fun sendBattery(level: Int, charging: Boolean) {
         send(JSONObject().put("type", "battery").put("level", level).put("charging", charging))
+    }
+
+    fun sendPhotos(offset: Int, page: PhotoLibrary.Page) {
+        send(
+            JSONObject()
+                .put("type", "photos")
+                .put("offset", offset)
+                .put("next", page.next)
+                .put("more", page.more)
+                .put("items", page.items),
+        )
+    }
+
+    fun sendPhotosError(offset: Int, error: String) {
+        send(JSONObject().put("type", "photos").put("offset", offset).put("error", error).put("items", JSONArray()))
     }
 
     fun sendPing() {
@@ -327,6 +345,11 @@ class LinkClient(
                 listener.onUnpair()
                 close()
             }
+            "photos_list" -> listener.onPhotosRequest(
+                message.optInt("offset", 0).coerceAtLeast(0),
+                message.optInt("limit", 30),
+            )
+            "photo_get" -> message.optString("id").toLongOrNull()?.let { listener.onPhotoRequest(it) }
             "notification" -> listener.onText(message.optString("title") + "\n" + message.optString("body"))
             "file_meta" -> handleMeta(message)
             "file_chunk" -> handleChunk(message)

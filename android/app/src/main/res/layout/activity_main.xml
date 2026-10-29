@@ -570,6 +570,26 @@
                         <ImageView style="@style/CL.Chevron" />
                     </LinearLayout>
 
+                    <View style="@style/CL.Divider" />
+
+                    <LinearLayout
+                        android:id="@+id/photosAccess"
+                        style="@style/CL.Row">
+
+                        <LinearLayout style="@style/CL.RowText">
+
+                            <TextView
+                                style="@style/CL.RowTitle"
+                                android:text="Fotos recentes no computador" />
+
+                            <TextView
+                                android:id="@+id/photosAccessState"
+                                style="@style/CL.RowSubtitle" />
+                        </LinearLayout>
+
+                        <ImageView style="@style/CL.Chevron" />
+                    </LinearLayout>
+
                     <LinearLayout
                         android:id="@+id/openOverlaySettings"
                         android:layout_width="match_parent"

@@ -27,6 +27,12 @@ MAX_FILE_BYTES = 100 * 1024 * 1024
 CHUNK_RAW = 32 * 1024
 MAX_CHUNK_RAW = 256 * 1024
 MAX_CLIPBOARD = 250_000
+# Fotos recentes: o computador pede "photos_list" (offset, limit) e o celular
+# responde "photos" com miniaturas JPEG em base64. "photo_get" traz a foto
+# inteira pelo envio de arquivo comum, com open=true. Um celular antigo ignora.
+PHOTO_PAGE = 30
+MAX_PHOTO_PAGE = 60
+MAX_THUMB_B64 = 200_000
 PAIR_ATTEMPTS = 5
 PAIR_TTL_SECONDS = 90
 

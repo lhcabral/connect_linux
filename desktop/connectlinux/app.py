@@ -15,7 +15,7 @@ from .bluetooth_link import BluetoothLink
 from .control import ControlServer
 from .link_server import LinkServer
 from .store import Store
-from .system_bridge import local_ipv4s, open_path
+from .system_bridge import local_ipv4s, open_path, sanitize_filename
 from .usb_link import UsbLink
 
 log = logging.getLogger("connectlinux")
@@ -291,6 +291,18 @@ class App:
 
     def send_file(self, device_id: str, path: Path, open_after: bool = False) -> None:
         self._spawn(self.server.send_file(device_id, path, open_after))
+
+    def request_photos(self, device_id: str, offset: int = 0) -> None:
+        self._spawn(self.server.request_photos(device_id, offset))
+
+    def open_phone_photo(self, device_id: str, photo: dict) -> None:
+        """Abre a foto do celular. Se ela já foi trazida antes, abre a cópia local."""
+        local = self.store.download_dir.expanduser() / sanitize_filename(photo["name"])
+        if local.is_file() and local.stat().st_size == photo.get("size"):
+            open_path(local)
+            return
+        self._log(f"Trazendo {photo['name']} do celular…")
+        self._spawn(self.server.request_photo(device_id, photo["id"]))
 
     def find_device(self, device_id: str) -> None:
         self._spawn(self.server.find_device(device_id))
