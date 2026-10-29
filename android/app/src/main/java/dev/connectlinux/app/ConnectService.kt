@@ -659,13 +659,19 @@ class ConnectService : Service() {
                 if (current != generation.get()) return
                 photos.execute {
                     try {
-                        if (PhotoLibrary.allowed(this@ConnectService)) {
-                            client.sendPhotos(offset, PhotoLibrary.recent(this@ConnectService, offset, limit))
-                        } else {
+                        val access = PhotoLibrary.access(this@ConnectService)
+                        if (access == PhotoLibrary.Access.NONE) {
                             client.sendPhotosError(offset, "permission")
                             askPhotoPermission()
+                            return@execute
                         }
-                    } catch (_: Exception) {
+                        val page = PhotoLibrary.recent(this@ConnectService, offset, limit, store.photoFolderId)
+                        client.sendPhotos(offset, page, access == PhotoLibrary.Access.PARTIAL, store.photoFolderName)
+                    } catch (exc: Exception) {
+                        try {
+                            client.sendPhotosError(offset, "failed")
+                        } catch (_: Exception) {
+                        }
                     }
                 }
             }

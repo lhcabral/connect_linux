@@ -64,18 +64,22 @@ class MainActivity : AppCompatActivity() {
             Toast.makeText(this, "Sem a permissão de Bluetooth não dá para conectar por Bluetooth.", Toast.LENGTH_LONG).show()
         }
     }
-    private val requestPhotos = registerForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
+    private val requestPhotos = registerForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) {
         renderPhotosAccess()
-        when {
-            granted -> Toast.makeText(this, "Pronto. No computador, abra a aba Fotos e clique em Atualizar.", Toast.LENGTH_LONG).show()
-            shouldShowRequestPermissionRationale(PhotoLibrary.permission) ->
+        when (PhotoLibrary.access(this)) {
+            PhotoLibrary.Access.FULL ->
+                Toast.makeText(this, "Pronto. No computador, abra a aba Fotos e clique em Atualizar.", Toast.LENGTH_LONG).show()
+            PhotoLibrary.Access.PARTIAL ->
+                Toast.makeText(this, "Só as fotos escolhidas vão aparecer no computador. Para ver todas, toque de novo e escolha Permitir tudo.", Toast.LENGTH_LONG).show()
+            PhotoLibrary.Access.NONE -> if (shouldShowRequestPermissionRationale(PhotoLibrary.mainPermission)) {
                 Toast.makeText(this, "Sem essa permissão o computador não consegue ver as fotos.", Toast.LENGTH_LONG).show()
-            else -> {
+            } else {
                 Toast.makeText(this, "Em Permissões, permita Fotos e vídeos para o Connect Linux.", Toast.LENGTH_LONG).show()
                 startActivity(Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.parse("package:$packageName")))
             }
         }
     }
+    private val deviceStore by lazy { DeviceStore(this) }
     private val pickFile = registerForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
         if (uri != null) service?.sendFile(uri)
     }
@@ -272,23 +276,61 @@ class MainActivity : AppCompatActivity() {
     private fun handlePhotoRequest(intent: Intent?) {
         if (intent?.getBooleanExtra(ConnectService.EXTRA_ASK_PHOTOS, false) != true) return
         intent.removeExtra(ConnectService.EXTRA_ASK_PHOTOS)
-        if (!PhotoLibrary.allowed(this)) requestPhotos.launch(PhotoLibrary.permission)
+        if (PhotoLibrary.access(this) != PhotoLibrary.Access.FULL) requestPhotos.launch(PhotoLibrary.permissions)
     }
 
     private fun renderPhotosAccess() {
-        binding.photosAccessState.text = if (PhotoLibrary.allowed(this)) {
-            "Permitido: veja as fotos na aba Fotos do computador"
+        binding.photosAccessState.text = when (PhotoLibrary.access(this)) {
+            PhotoLibrary.Access.FULL -> "Permitido: veja as fotos na aba Fotos do computador"
+            PhotoLibrary.Access.PARTIAL -> "Só algumas fotos liberadas: toque para permitir todas"
+            PhotoLibrary.Access.NONE -> "Não permitido: toque para permitir"
+        }
+        val folder = deviceStore.photoFolderName
+        binding.photoFolderState.text = if (deviceStore.photoFolderId.isEmpty()) {
+            "Todas as fotos da galeria"
         } else {
-            "Não permitido: toque para permitir"
+            "Só a pasta $folder"
         }
     }
 
     private fun openPhotosAccess() {
-        if (PhotoLibrary.allowed(this)) {
+        if (PhotoLibrary.access(this) == PhotoLibrary.Access.FULL) {
             Toast.makeText(this, "No computador, abra a aba Fotos do Connect Linux.", Toast.LENGTH_LONG).show()
         } else {
-            requestPhotos.launch(PhotoLibrary.permission)
+            requestPhotos.launch(PhotoLibrary.permissions)
         }
+    }
+
+    private fun choosePhotoFolder() {
+        if (!PhotoLibrary.allowed(this)) {
+            Toast.makeText(this, "Permita primeiro o acesso às fotos.", Toast.LENGTH_LONG).show()
+            requestPhotos.launch(PhotoLibrary.permissions)
+            return
+        }
+        Thread {
+            val folders = try {
+                PhotoLibrary.folders(this)
+            } catch (_: Exception) {
+                emptyList()
+            }
+            runOnUiThread {
+                if (isFinishing) return@runOnUiThread
+                val labels = listOf("Todas as fotos") + folders.map { "${it.name} (${it.count})" }
+                val current = folders.indexOfFirst { it.id == deviceStore.photoFolderId } + 1
+                MaterialAlertDialogBuilder(this)
+                    .setTitle("Pasta compartilhada com o computador")
+                    .setSingleChoiceItems(labels.toTypedArray(), current) { dialog, which ->
+                        val chosen = folders.getOrNull(which - 1)
+                        deviceStore.photoFolderId = chosen?.id.orEmpty()
+                        deviceStore.photoFolderName = chosen?.name.orEmpty()
+                        renderPhotosAccess()
+                        dialog.dismiss()
+                        Toast.makeText(this, "No computador, clique em Atualizar na aba Fotos.", Toast.LENGTH_SHORT).show()
+                    }
+                    .setNegativeButton("Cancelar", null)
+                    .show()
+            }
+        }.start()
     }
 
     private fun bindActions() {
@@ -366,6 +408,7 @@ class MainActivity : AppCompatActivity() {
             startActivity(Intent(Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS))
         }
         binding.photosAccess.setOnClickListener { openPhotosAccess() }
+        binding.photoFolder.setOnClickListener { choosePhotoFolder() }
         binding.openOverlayRow.setOnClickListener {
             Toast.makeText(this, "Ative \"Sobrepor a outros apps\" para o Connect Linux.", Toast.LENGTH_LONG).show()
             startActivity(Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION, Uri.parse("package:$packageName")))

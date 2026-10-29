@@ -598,6 +598,9 @@ class DesktopWindow:
                 "permita o acesso e clique em Atualizar.",
             )
             return
+        if payload.get("error"):
+            _set_text(self.photos_hint, "O celular não conseguiu ler a galeria. Tente Atualizar de novo.")
+            return
         if payload.get("offset", 0) != self._photos_next:
             return
         self._photos_next = payload.get("next", self._photos_next)
@@ -609,10 +612,10 @@ class DesktopWindow:
             tile.show_all()
             self._photos_count += 1
         self.photos_more.set_visible(bool(payload.get("more")))
-        if self._photos_count:
-            _set_text(self.photos_hint, "Clique numa foto para abri-la aqui. Ela fica salva na pasta de recebidos.")
-        else:
-            _set_text(self.photos_hint, "Nenhuma foto encontrada no celular.")
+        folder = payload.get("folder") or ""
+        title = f"Fotos recentes de {payload.get('name') or 'celular'}"
+        _set_text(self.photos_title, f"{title} · pasta {folder}" if folder else title)
+        _set_text(self.photos_hint, _photos_hint(payload, self._photos_count, folder))
 
     def _open_photo(self, child: Gtk.FlowBoxChild) -> None:
         photo = getattr(child.get_child(), "photo", None)
@@ -1188,6 +1191,28 @@ def _setting_row(icon: str, title: str, subtitle: str, end: Gtk.Widget | None) -
 
 
 PHOTO_TILE = 150
+
+
+def _photos_hint(payload: dict, shown: int, folder: str) -> str:
+    partial = payload.get("partial")
+    if shown:
+        text = "Clique numa foto para abri-la aqui. Ela fica salva na pasta de recebidos."
+        if partial:
+            text += " O celular liberou só algumas fotos; para ver todas, toque em Fotos recentes no computador no app."
+        return text
+    if payload.get("skipped"):
+        return (
+            f"O celular achou {payload.get('total', 0)} fotos, mas não conseguiu preparar as miniaturas. "
+            "Clique em Atualizar para tentar de novo."
+        )
+    if partial:
+        return (
+            "O celular liberou só algumas fotos, e nenhuma foi escolhida. No app do celular, toque em "
+            "Fotos recentes no computador e escolha Permitir tudo."
+        )
+    if folder:
+        return f"A pasta {folder} está vazia. Escolha outra pasta no app do celular, em Pasta compartilhada com o computador."
+    return "Nenhuma foto encontrada na galeria do celular."
 
 
 def _photo_tile(photo: dict) -> Gtk.Widget | None:

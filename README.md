@@ -83,7 +83,9 @@ Para a imagem abrir sozinha no celular mesmo com o aplicativo em segundo plano, 
 
 Com o celular conectado, abra a aba **Fotos** na janela do computador. Aparecem as últimas fotos da galeria, das mais novas para as mais antigas; **Mostrar mais** traz as anteriores. Clique numa foto para trazê-la inteira: ela abre no visualizador de imagens e fica salva na pasta de recebidos. Se a mesma foto já foi trazida antes, abre a cópia local na hora.
 
-Na primeira vez, o celular pede acesso às fotos: toque no aviso do Connect Linux e permita. A permissão também pode ser dada em **Fotos recentes no computador**, no aplicativo do celular. O celular só envia as fotos quando o computador pareado pede.
+Para mostrar só uma pasta (por exemplo Câmera ou WhatsApp Images), toque em **Pasta compartilhada com o computador** nos Ajustes do aplicativo do celular.
+
+Na primeira vez, o celular pede acesso às fotos: toque no aviso do Connect Linux e escolha **Permitir tudo**. Com "acesso limitado", o computador só vê as fotos que você escolher. A permissão também pode ser dada em **Fotos recentes no computador**, no aplicativo do celular. O celular só envia as fotos quando o computador pareado pede.
 
 Arquivos recebidos no computador vão para `~/ConnectLinux/Recebidos`. No celular, vão para a pasta Downloads. O limite é 100 MB por arquivo.
 

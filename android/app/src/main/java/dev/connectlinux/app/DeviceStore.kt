@@ -49,6 +49,19 @@ class DeviceStore(context: Context) {
         prefs.edit().putStringSet(KEY_MUTED_APPS, muted).apply()
     }
 
+    /** Pasta (álbum da galeria) que o computador pode ver; vazio quer dizer todas as fotos. */
+    var photoFolderId: String
+        get() = prefs.getString(KEY_PHOTO_FOLDER, null).orEmpty()
+        set(value) {
+            prefs.edit().putString(KEY_PHOTO_FOLDER, value).apply()
+        }
+
+    var photoFolderName: String
+        get() = prefs.getString(KEY_PHOTO_FOLDER_NAME, null).orEmpty()
+        set(value) {
+            prefs.edit().putString(KEY_PHOTO_FOLDER_NAME, value).apply()
+        }
+
     var lastDesktopId: String?
         get() = prefs.getString(KEY_LAST, null)
         set(value) {
@@ -144,6 +157,8 @@ class DeviceStore(context: Context) {
         const val KEY_CLIPBOARD = "clipboard"
         const val KEY_NOTIFICATIONS = "notifications"
         const val KEY_MUTED_APPS = "muted_notification_apps"
+        const val KEY_PHOTO_FOLDER = "photo_folder"
+        const val KEY_PHOTO_FOLDER_NAME = "photo_folder_name"
         const val KEY_LAST = "last_desktop"
         const val KEY_TARGET = "last_target"
         const val KEY_PAIRS = "pairs"

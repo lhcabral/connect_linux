@@ -315,6 +315,10 @@ class ConversationTests(unittest.IsolatedAsyncioTestCase):
                 "offset": 0,
                 "next": 3,
                 "more": True,
+                "total": 120,
+                "skipped": 1,
+                "partial": True,
+                "folder": "Camera\n",
                 "items": [
                     {"id": "42", "name": "../praia.jpg", "size": 7, "taken": 1, "thumb": thumb},
                     {"id": "abc", "name": "ruim.jpg", "size": 1, "taken": 1, "thumb": thumb},
@@ -329,6 +333,8 @@ class ConversationTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual([item["id"] for item in page["items"]], ["42"])
         self.assertEqual(page["items"][0]["name"], "praia.jpg")
         self.assertEqual((page["next"], page["more"]), (3, True))
+        self.assertEqual((page["total"], page["skipped"], page["partial"]), (120, 1, True))
+        self.assertEqual(page["folder"], "Camera")
 
         await self.server.request_photo(device_id, "42")
         wanted = await peer.recv_type("photo_get")

@@ -708,6 +708,10 @@ class LinkServer:
                     "offset": offset,
                     "next": following if isinstance(following, int) and following > offset else offset + len(items),
                     "more": bool(message.get("more")),
+                    "total": _count(message.get("total")),
+                    "skipped": _count(message.get("skipped")),
+                    "partial": bool(message.get("partial")),
+                    "folder": sanitize_name(message.get("folder")) if message.get("folder") else "",
                     "error": str(message.get("error", ""))[:40],
                     "items": items,
                 },
@@ -853,6 +857,10 @@ async def read_message(reader: asyncio.StreamReader) -> dict:
     length = frame_size(header)
     payload = await reader.readexactly(length)
     return decode_payload(payload)
+
+
+def _count(value: object) -> int:
+    return value if isinstance(value, int) and value >= 0 else 0
 
 
 def _sha256_file(path: Path) -> str:

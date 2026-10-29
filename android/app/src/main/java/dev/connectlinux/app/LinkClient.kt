@@ -90,13 +90,17 @@ class LinkClient(
         send(JSONObject().put("type", "battery").put("level", level).put("charging", charging))
     }
 
-    fun sendPhotos(offset: Int, page: PhotoLibrary.Page) {
+    fun sendPhotos(offset: Int, page: PhotoLibrary.Page, partial: Boolean, folder: String) {
         send(
             JSONObject()
                 .put("type", "photos")
                 .put("offset", offset)
                 .put("next", page.next)
                 .put("more", page.more)
+                .put("total", page.total)
+                .put("skipped", page.skipped)
+                .put("partial", partial)
+                .put("folder", folder)
                 .put("items", page.items),
         )
     }
