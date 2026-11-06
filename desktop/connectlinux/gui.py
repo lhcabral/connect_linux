@@ -963,7 +963,8 @@ class DesktopWindow:
         return False
 
     def _update_done(self, version: str) -> bool:
-        if updater.running_installed():
+        if updater.has_installed():
+            updater.drop_source_shortcut()
             notify("Connect Linux", f"Versão {version} instalada. Reabrindo o programa.")
             updater.restart_later()
             self._quit()
@@ -1524,6 +1525,8 @@ def _open_target(target: str) -> None:
 
 
 def run_gui(app: App, start_hidden: bool = False) -> None:
+    if updater.running_installed():
+        updater.drop_source_shortcut()
     autostart.ensure_default()
     window = DesktopWindow(app, start_hidden)
 

@@ -13,6 +13,7 @@ import urllib.request
 from pathlib import Path
 
 from . import __version__
+from .context_menu import data_home
 
 log = logging.getLogger("connectlinux")
 
@@ -20,6 +21,7 @@ LATEST_URL = "https://api.github.com/repos/lhcabral/connect_linux/releases/lates
 DEB_ASSET = "connectlinux_all.deb"
 SUMS_ASSET = "SHA256SUMS.txt"
 INSTALLED_DIR = Path("/usr/lib/connectlinux")
+INSTALLED_BIN = Path("/usr/bin/connectlinux")
 
 
 def parse_version(text: str) -> tuple[int, ...]:
@@ -81,10 +83,39 @@ def running_installed() -> bool:
     return INSTALLED_DIR in Path(__file__).resolve().parents
 
 
+def has_installed() -> bool:
+    return INSTALLED_BIN.is_file()
+
+
+def drop_source_shortcut() -> bool:
+    """Apaga o atalho do install.sh, que esconde o do pacote no menu e abre o código-fonte."""
+    shortcut = data_home() / "applications" / "connectlinux.desktop"
+    try:
+        lines = shortcut.read_text(encoding="utf-8").splitlines()
+    except OSError:
+        return False
+    exec_line = next((line[5:].strip() for line in lines if line.startswith("Exec=")), "")
+    if not exec_line.split(" ")[0].strip("\"'").endswith("/run.sh"):
+        return False
+    try:
+        shortcut.unlink()
+    except OSError as exc:
+        log.info("atalho antigo: %s", exc)
+        return False
+    if shutil.which("update-desktop-database"):
+        subprocess.run(
+            ["update-desktop-database", str(shortcut.parent)],
+            check=False,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+        )
+    return True
+
+
 def restart_later() -> None:
     """Abre a versão instalada alguns segundos depois, quando esta já liberou a porta."""
     subprocess.Popen(
-        ["sh", "-c", "sleep 2; exec /usr/bin/connectlinux"],
+        ["sh", "-c", f"sleep 2; exec {INSTALLED_BIN}"],
         stdout=subprocess.DEVNULL,
         stderr=subprocess.DEVNULL,
         start_new_session=True,
